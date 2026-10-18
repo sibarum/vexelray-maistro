@@ -134,6 +134,11 @@ record Doc(Transcript transcript, String activity, boolean busy, Panes panes, Ag
             return new Mind(graph, positions, turn + 1);
         }
 
+        /** Focus a node; unchanged if there is no such node. Nothing moves, so nothing is laid out again. */
+        Mind focused(String id) {
+            return new Mind(graph.focus(id), positions, turn);
+        }
+
         /** The graph changed: lay it out against where everything was. Pure, so it may run inside a commit. */
         Mind with(MapGraph next) {
             return new Mind(next, Layout.next(positions, next, Mind::size), turn);

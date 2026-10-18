@@ -14,8 +14,8 @@ longer list this is drawn from.
       CLI's "Not logged in": the desktop app's bundled `claude.exe` needs its own `/login`.
 - [ ] Permissions. Claude Code runs with `--permission-mode default` and no prompt tool, so anything that needs
       approval is denied. Inline approve/deny in the transcript, over `--permission-prompt-tool` (guide, gap 3).
-- [ ] Click a map node to focus it, and start a turn from it with its neighbourhood (`MapGraph.neighbourhood`,
-      `MapProtocol.render`). The map is a picture today and is not hit-tested.
+- [ ] Start a turn from the focused node with its neighbourhood (`MapGraph.neighbourhood`, `MapProtocol.render`).
+      Clicking a node focuses it already (`map.node.<id>`).
 - [ ] Ctrl+N for a new conversation, and resuming an earlier one (`--resume`; the conductor already resumes after
       the process dies).
 
@@ -25,5 +25,5 @@ longer list this is drawn from.
 - [ ] Live app panes and the action timeline: `ottermate` runs as typed steps with their frames (guide, gaps 1-2).
 - [ ] The context stream's KV cache, vector index and session graph sections are placeholders saying so.
 - [ ] Hiding the map leaves the conversation at its fixed width with empty space beside it.
-- [ ] Automation coverage: a checked-in `ottermate` script through the main path (the e2e one used so far lives
-      in `target/`).
+- [ ] Automation coverage: `src/test/ottermate/map-focus.txt` is the one checked-in script. Nothing runs it from
+      `mvn`, and its stand-in CLI is a `.cmd`, so it is Windows-only.

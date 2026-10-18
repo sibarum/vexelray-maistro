@@ -53,7 +53,7 @@ final class Ui {
 
         rail = new PaneRail(gui, model::toggle);
         conversation = new ConversationPane(gui);
-        map = new MapPane(gui);
+        map = new MapPane(gui, model::focus);
         context = new ContextPane(gui);
 
         Node body = gui.row()
@@ -85,6 +85,7 @@ final class Ui {
         context.node().visible(doc.panes().context());
         conversation.show(doc.transcript());
         context.show(doc.agent());
+        context.show(doc.mind().graph());
         map.show(doc.mind());
         status.text(Landmarks.STATUS_AGENT, "agent: " + doc.activity());
         status.text(Landmarks.STATUS_MESSAGE, doc.status());

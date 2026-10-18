@@ -181,6 +181,19 @@ ottermate --size 66emx20em shot smallest.png --launch ...                # the m
 The landmarks in `Landmarks.java` are the names a script uses: `await status.agent idle` waits for a reply to
 finish, and `click composer` then `type ...` and `key ENTER` sends one. `ottermate help` lists every verb.
 
+### Without a logged-in Claude Code
+
+`src/test/ottermate/` holds a check that needs no login and no network: `fake-claude.cmd` stands in for the CLI and
+prints one recorded turn (`replay-map-turn.jsonl`) whose `maistro-map` block puts three nodes on the map, and
+`map-focus.txt` sends a message, clicks a node and waits for the focus to move. It leaves its two screenshots in
+`target/`. Copy it to check anything that needs a reply on screen.
+
+```
+ottermate --script src/test/ottermate/map-focus.txt --launch mvn.cmd compile exec:exec -Dautomation=0 "-Dapp.args=--claude=src/test/ottermate/fake-claude.cmd"
+```
+
+The stand-in exits after its turn, so the status line ends at `agent: stopped`, not `idle`.
+
 ## Logging
 
 The framework configures logging for you, before anything else runs, and the defaults follow what kind of run it is:

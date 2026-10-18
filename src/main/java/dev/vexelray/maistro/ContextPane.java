@@ -6,7 +6,11 @@ import dev.vexelray.gui.core.layout.LayoutEnums.AlignItems;
 import dev.vexelray.gui.core.layout.LayoutEnums.Justify;
 import dev.vexelray.gui.core.layout.Length;
 import dev.vexelray.gui.core.style.Role;
+import dev.vexelray.maistro.map.Edge;
+import dev.vexelray.maistro.map.MapGraph;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 
 /**
@@ -27,9 +31,15 @@ final class ContextPane {
     private final Node turns;
     private final Node cost;
     private final Node tokens;
+    private final Node focus;
+    private final Node links;
 
     ContextPane(Gui gui) {
         this.gui = gui;
+        focus = gui.text("").font(Type.UI).textSize(Type.BODY).textColor(gui.theme().color(Role.INK))
+                .wordWrap(true).width(Length.FILL);
+        gui.landmark(Landmarks.CONTEXT_FOCUS, focus);
+        links = note("");
         model = value();
         session = value();
         folder = value();
@@ -53,13 +63,14 @@ final class ContextPane {
                 .alignItems(AlignItems.STRETCH)
                 .scroll(false, true)
                 .children(ConversationPane.header(gui, "CONTEXT STREAM"),
-                        section("FOCUS", note("Click a node in the map to focus it.")),
+                        section("FOCUS", focus, links),
                         sessionSection,
                         section("KV CACHE", note("Not connected yet.")),
                         section("VECTOR INDEX", note("Not connected yet.")),
                         section("SESSION GRAPH", note("Not connected yet.")));
         gui.landmark(Landmarks.CONTEXT, root);
         show(Doc.AgentInfo.NONE);
+        show(MapGraph.EMPTY);
     }
 
     Node node() {
@@ -74,6 +85,29 @@ final class ContextPane {
         turns.text(Integer.toString(info.turns()));
         cost.text(String.format(Locale.ROOT, "$%.4f", info.costUsd()));
         tokens.text(info.inputTokens() + " in / " + info.outputTokens() + " out");
+    }
+
+    /** Write the focus: the focused node's label and what it links to, or how to focus one. */
+    void show(MapGraph graph) {
+        dev.vexelray.maistro.map.Node node = graph.focus().flatMap(graph::node).orElse(null);
+        if (node == null) {
+            focus.visible(false).text("");
+            links.text("Click a node in the map to focus it.");
+            return;
+        }
+        focus.visible(true).text(node.shownLabel());
+        links.text(linkedTo(graph, node.id()));
+    }
+
+    /** {@code linked to KV cache, Eviction}: the labels of the nodes one edge from {@code id}. */
+    static String linkedTo(MapGraph graph, String id) {
+        List<String> names = new ArrayList<>();
+        for (Edge e : graph.edges()) {
+            if (e.touches(id)) {
+                graph.node(e.other(id)).ifPresent(n -> names.add(n.shownLabel()));
+            }
+        }
+        return names.isEmpty() ? "linked to nothing yet" : "linked to " + String.join(", ", names);
     }
 
     private Node section(String label, Node... rows) {

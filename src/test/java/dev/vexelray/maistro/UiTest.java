@@ -5,6 +5,9 @@ import dev.vexelray.framework.shell.VexelApplication;
 import dev.vexelray.maistro.agent.AgentEvent;
 import dev.vexelray.maistro.agent.Json;
 import dev.vexelray.maistro.chat.Turn;
+import dev.vexelray.maistro.map.Edge;
+import dev.vexelray.maistro.map.MapGraph;
+import dev.vexelray.maistro.map.Node;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -140,6 +143,48 @@ class UiTest {
         assertEquals(List.of("map · +2 nodes, +1 links", "focus · kv-cache"), turn.chips());
         assertEquals(2, doc.mind().graph().nodeCount());
         assertEquals(2, doc.mind().positions().size(), "every node is placed");
+    }
+
+    @Test
+    void focusingANodeMovesTheFocusAndNothingElse() {
+        Conductor c = wiring.conductor();
+        String reply = """
+                ```maistro-map
+                node kv-cache "KV cache"
+                node surprise "Surprise score"
+                focus kv-cache
+                ```
+                """;
+        c.onAssistantText(new AgentEvent.AssistantText("m1", reply, ""));
+        Doc.Mind before = wiring.model().doc().mind();
+
+        wiring.model().focus("surprise");
+        Doc.Mind after = wiring.model().doc().mind();
+        assertEquals("surprise", after.graph().focus().orElseThrow());
+        assertEquals(before.positions(), after.positions(), "nothing moved");
+
+        wiring.model().focus("no-such-node");
+        assertEquals(after, wiring.model().doc().mind());
+    }
+
+    @Test
+    void theFocusSaysWhatItLinksTo() {
+        MapGraph graph = MapGraph.EMPTY
+                .withNode(Node.of("a", "KV cache", 1))
+                .withNode(Node.of("b", "Surprise score", 1))
+                .withNode(Node.of("c", "Eviction", 1))
+                .withEdge(new Edge("b", "a", "", 1))
+                .withEdge(new Edge("a", "c", "", 1));
+        assertEquals("linked to Surprise score, Eviction", ContextPane.linkedTo(graph, "a"));
+        assertEquals("linked to KV cache", ContextPane.linkedTo(graph, "c"));
+        assertEquals("linked to nothing yet",
+                ContextPane.linkedTo(graph.withNode(Node.of("d", "Alone", 1)), "d"));
+    }
+
+    @Test
+    void aMapNodesLandmarkHasNoSlash() {
+        assertEquals("map.node.kv-cache", Landmarks.mapNode("kv-cache"));
+        assertEquals("map.node.src:Main.java", Landmarks.mapNode("src/Main.java"));
     }
 
     @Test

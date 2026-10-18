@@ -30,9 +30,19 @@ final class Landmarks {
     /** The mind map, the main stage. */
     static final String MAP = "map";
 
+    /**
+     * One node of the mind map, by its id: {@code click map.node.kv-cache} focuses it. A landmark may not hold a
+     * {@code '/'}, which a node id may, so one becomes a {@code ':'} here.
+     */
+    static String mapNode(String id) {
+        return MAP + ".node." + id.replace('/', ':');
+    }
+
     /** The context stream, and its session readouts. */
     static final String CONTEXT = "context";
     static final String CONTEXT_SESSION = "context.session";
+    /** The focused node's label, empty when nothing is focused: {@code await context.focus KV cache}. */
+    static final String CONTEXT_FOCUS = "context.focus";
 
     /** The status line, and its slots. */
     static final String STATUS = "status";

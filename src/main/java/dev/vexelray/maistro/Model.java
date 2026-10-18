@@ -52,6 +52,11 @@ final class Model {
         change(d -> d.withPanes(d.panes().toggle(pane)));
     }
 
+    /** Focus a node of the mind map. */
+    void focus(String nodeId) {
+        change(d -> d.withMind(m -> m.focused(nodeId)));
+    }
+
     /** Say something on the status line. */
     void say(String message) {
         change(d -> d.withStatus(message));
