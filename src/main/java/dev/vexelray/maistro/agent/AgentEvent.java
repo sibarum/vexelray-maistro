@@ -258,6 +258,11 @@ public interface AgentEvent {
         public void to(Sink l) {
             l.onPermissionRequest(this);
         }
+
+        /** The CLI's own suggested rules that can be offered, in words ({@link Suggestion#offered}). */
+        public java.util.List<Suggestion> suggestions() {
+            return Suggestion.offered(request.get("permission_suggestions"));
+        }
     }
 
     /** A line that was not understood: not JSON, or a type this code does not know. Nothing is dropped silently. */

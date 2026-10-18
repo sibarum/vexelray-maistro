@@ -5,6 +5,7 @@ import dev.vexelray.maistro.agent.AgentListener;
 import dev.vexelray.maistro.agent.AgentSession;
 import dev.vexelray.maistro.agent.ClaudeCli;
 import dev.vexelray.maistro.agent.JsonValue;
+import dev.vexelray.maistro.agent.Suggestion;
 import dev.vexelray.maistro.archive.Conversation;
 import dev.vexelray.maistro.chat.Turn;
 import dev.vexelray.maistro.map.MapDelta;
@@ -337,8 +338,16 @@ final class Conductor implements AgentListener, AutoCloseable {
         })).withActivity("thinking", true));
     }
 
-    /** What answering a permission request needs: its id, and the input to let the tool run with. */
-    private record Asked(String requestId, String tool, JsonValue input) {
+    /**
+     * What answering a permission request needs: its id, the input to let the tool run with, and the CLI's own
+     * standing permissions on offer, in the order the turn shows them.
+     */
+    private record Asked(String requestId, String tool, JsonValue input, List<Suggestion> offers) {
+    }
+
+    /** An offer as a button says it; one written to a settings file says so, since it outlives the conversation. */
+    static String offerLabel(Suggestion s) {
+        return s.persistent() ? s.label() + " (saved to settings)" : s.label();
     }
 
     /** What the agent is told when the human says no. */
@@ -353,7 +362,9 @@ final class Conductor implements AgentListener, AutoCloseable {
     public void onPermissionRequest(AgentEvent.PermissionRequest e) {
         Long known = e.toolUseId().isEmpty() ? null : tools.get(e.toolUseId());
         String detail = describe(e.toolName(), e.input());
-        Asked asked = new Asked(e.requestId(), e.toolName(), e.input());
+        List<Suggestion> offers = e.suggestions();
+        List<String> labels = offers.stream().map(Conductor::offerLabel).toList();
+        Asked asked = new Asked(e.requestId(), e.toolName(), e.input(), offers);
         model.change(d -> {
             boolean seen = known != null && d.transcript().turns().stream().anyMatch(t -> t.id() == known);
             Doc next = seen ? d : d.withTranscript(t -> t.append(id -> Turn.tool(id, e.toolName(), detail)));
@@ -362,7 +373,7 @@ final class Conductor implements AgentListener, AutoCloseable {
             // more than once, and the last run is the one committed, so each run drops what an earlier one put.
             asks.values().remove(asked);
             asks.put(turn, asked);
-            return next.withTranscript(t -> t.change(turn, r -> r.withAsk(Turn.Ask.PENDING)))
+            return next.withTranscript(t -> t.change(turn, r -> r.asking(labels)))
                     .withActivity("waiting for you: " + e.toolName(), true);
         });
     }
@@ -393,8 +404,33 @@ final class Conductor implements AgentListener, AutoCloseable {
             return;
         }
         model.change(d -> d.withTranscript(t -> t.change(turn,
-                        r -> r.withAsk(allow ? Turn.Ask.ALLOWED : Turn.Ask.DENIED)))
+                        r -> r.settled(allow ? Turn.Ask.ALLOWED : Turn.Ask.DENIED)))
                 .withActivity(waitingOr(d, turn, allow ? "running " + a.tool() : "thinking"), true));
+    }
+
+    /**
+     * The human allowed the tool turn {@code turn} and took offer {@code n} with it: the tool runs, and the CLI's
+     * own suggestion goes back unchanged so it stops asking for what that covers. The turn wears what was set up,
+     * scope and all. On a worker; a second answer, or an offer that is not there, does nothing.
+     */
+    void answerAlways(long turn, int n) {
+        Asked a = asks.get(turn);
+        if (a == null || n < 0 || n >= a.offers().size() || !asks.remove(turn, a)) {
+            return;
+        }
+        Suggestion offer = a.offers().get(n);
+        AgentSession s = current();
+        if (s == null || !s.allow(a.requestId(), a.input(), offer)) {
+            failed("Could not answer Claude Code: its process has gone.");
+            return;
+        }
+        LOG.info("allowed {} and set up: {}", a.tool(), offer.update().toJson());
+        model.change(d -> d.withTranscript(t -> t.change(turn, r -> {
+                    List<String> chips = new ArrayList<>(r.chips());
+                    chips.add(offerLabel(offer));
+                    return r.settled(Turn.Ask.ALWAYS).withChips(chips);
+                }))
+                .withActivity(waitingOr(d, turn, "running " + a.tool()), true));
     }
 
     /** What the agent is doing once {@code answered} is: still waiting on another ask, or {@code otherwise}. */

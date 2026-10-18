@@ -70,9 +70,21 @@ final class ConversationPane {
     private volatile Consumer<String> send = text -> { };
     private volatile Answer answer = (turn, allow) -> { };
 
+    private volatile Always always = (turn, offer) -> { };
+
     /** What pressing Allow or Deny under a tool turn does. */
     interface Answer {
         void answer(long turn, boolean allow);
+    }
+
+    /** What pressing one of a tool turn's standing-permission offers does: allow, and set up offer {@code offer}. */
+    interface Always {
+        void always(long turn, int offer);
+    }
+
+    /** What the offers under a waiting tool turn do. */
+    void onAlways(Always handler) {
+        this.always = handler;
     }
 
     /** The conversation; {@code unanchor} is pressing the ✕ on the {@code from} chip. */
@@ -294,10 +306,16 @@ final class ConversationPane {
         if (asking.isEmpty()) {
             gui.clearLandmark(Landmarks.ASK_ALLOW);
             gui.clearLandmark(Landmarks.ASK_DENY);
+            gui.clearLandmark(Landmarks.ASK_ALWAYS);
         } else {
             TurnView oldest = views.get(asking.getFirst().id());
             gui.landmark(Landmarks.ASK_ALLOW, oldest.allow.node());
             gui.landmark(Landmarks.ASK_DENY, oldest.deny.node());
+            if (oldest.offerButtons.isEmpty()) {
+                gui.clearLandmark(Landmarks.ASK_ALWAYS);
+            } else {
+                gui.landmark(Landmarks.ASK_ALWAYS, oldest.offerButtons.getFirst().node());
+            }
         }
     }
 
@@ -312,6 +330,10 @@ final class ConversationPane {
         final Node ask;
         final Button allow;
         final Button deny;
+        /** The standing permissions on offer, one button each, under Allow and Deny. */
+        final Node offers;
+        List<Button> offerButtons = List.of();
+        List<String> offerLabels = List.of();
         Turn shown;
         /** The chips on show, and what they say. */
         Node[] chipList = new Node[0];
@@ -329,8 +351,9 @@ final class ConversationPane {
             ask = gui.row().gap(Type.TIGHT).alignItems(AlignItems.CENTER)
                     .children(allow.node(), deny.node())
                     .visible(false);
+            offers = gui.column().gap(Type.TIGHT).alignItems(AlignItems.START).visible(false);
             root = gui.column().width(Length.FILL).gap(Type.TIGHT).alignItems(AlignItems.STRETCH)
-                    .children(heading, body, ask, chips);
+                    .children(heading, body, ask, offers, chips);
             update(turn);
         }
 
@@ -338,7 +361,33 @@ final class ConversationPane {
         void forget() {
             gui.clearLandmark(Landmarks.askAllow(shown.id()));
             gui.clearLandmark(Landmarks.askDeny(shown.id()));
+            for (int i = 0; i < offerButtons.size(); i++) {
+                gui.clearLandmark(Landmarks.askAlways(shown.id(), i));
+            }
             root.remove();
+        }
+
+        /** One button per offer, rebuilt only when the offers change; {@code children(...)} appends, so old go. */
+        private void showOffers(Turn turn) {
+            if (!turn.offers().equals(offerLabels)) {
+                for (int i = 0; i < offerButtons.size(); i++) {
+                    gui.clearLandmark(Landmarks.askAlways(turn.id(), i));
+                    offerButtons.get(i).node().remove();
+                }
+                List<Button> made = new ArrayList<>();
+                for (int i = 0; i < turn.offers().size(); i++) {
+                    long id = turn.id();
+                    int n = i;
+                    Button b = new Button(gui, turn.offers().get(i)).kind(Button.Kind.SECONDARY)
+                            .onPress(() -> always.always(id, n));
+                    gui.landmark(Landmarks.askAlways(id, i), b.node());
+                    offers.append(b.node());
+                    made.add(b);
+                }
+                offerButtons = List.copyOf(made);
+                offerLabels = turn.offers();
+            }
+            offers.visible(turn.asking() && !offerButtons.isEmpty());
         }
 
         void update(Turn turn) {
@@ -361,6 +410,7 @@ final class ConversationPane {
                 body.spans(Markdown.spans(text, markup));
             }
             ask.visible(turn.asking());
+            showOffers(turn);
             List<String> labels = new ArrayList<>(turn.chips());
             if (!turn.ask().chip().isEmpty()) {
                 labels.add(turn.ask().chip());

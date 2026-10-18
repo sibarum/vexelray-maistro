@@ -122,3 +122,12 @@ about 60 lines, and every application with "recent files", "switch to" or "run c
 
 What the framework could do: a `QuickPick<T>` (or `Palette`) taking items, a label function and a chosen callback.
 It would float over the window, filter as you type, and close itself on Escape or a choice.
+
+## FN-9 · A tooltip left standing after the pointer only passed through 💡
+
+Seen once, in `target/always-asking.png` (the `always-allow.txt` run): the rail's "Mind map (Ctrl+2)" tooltip is up
+and covers the tool's command, though the pointer's last stop was the composer. `ottermate` travels the pointer to
+each target, and the line from the window's corner to the composer crosses that icon, so a tooltip seems to open
+from a pass and not close when the pointer leaves. Not reproduced on purpose; the other dozen runs show none.
+Worth checking whether a tip that opens mid-travel is closed on the next pointer move. It is the one thing in this
+application that appears on hover, and only the framework's tips do.

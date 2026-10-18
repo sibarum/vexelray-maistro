@@ -134,6 +134,30 @@ class UiTest {
     }
 
     @Test
+    void theClisOwnSuggestionsAreOfferedInWords() {
+        Conductor c = wiring.conductor();
+        c.onPermissionRequest(new AgentEvent.PermissionRequest("r1", "Bash", Json.parse("{\"command\":\"ls\"}"), "",
+                Json.parse("{\"permission_suggestions\":["
+                        + "{\"type\":\"addRules\",\"behavior\":\"allow\",\"destination\":\"session\","
+                        + "\"rules\":[{\"toolName\":\"Bash\",\"ruleContent\":\"ls\"}]},"
+                        + "{\"type\":\"addRules\",\"behavior\":\"allow\",\"destination\":\"localSettings\","
+                        + "\"rules\":[{\"toolName\":\"Bash\",\"ruleContent\":\"ls\"}]},"
+                        + "{\"type\":\"mystery\",\"destination\":\"session\"}]}")));
+        Turn turn = wiring.model().doc().transcript().last();
+        assertEquals(List.of("Always allow Bash(ls) · until Claude Code restarts",
+                "Always allow Bash(ls) · in this project, for me (saved to settings)"), turn.offers());
+
+        c.answerAlways(turn.id(), 5);
+        assertTrue(wiring.model().doc().transcript().last().asking(), "an offer that is not there does nothing");
+
+        c.onResult(result(false, 0, 1));
+        Turn lapsed = wiring.model().doc().transcript().turns().stream()
+                .filter(t -> t.id() == turn.id()).findFirst().orElseThrow();
+        assertEquals(Turn.Ask.LAPSED, lapsed.ask());
+        assertTrue(lapsed.offers().isEmpty(), "what was on offer goes when the ask does");
+    }
+
+    @Test
     void anAskWithNoProcessToAnswerIsNoted() {
         Conductor c = wiring.conductor();
         c.onPermissionRequest(new AgentEvent.PermissionRequest("r1", "Bash", Json.parse("{}"), "", Json.parse("{}")));

@@ -369,6 +369,22 @@ class AgentSessionTest {
     }
 
     @Test
+    void allowingWithAnOfferSendsItBackVerbatim() throws Exception {
+        FakeProcess fake = new FakeProcess();
+        AgentSession s = AgentSession.start(AgentSession.Options.of(EXE), new AgentListener() {
+        }, launcherOf(fake));
+        String update = "{\"type\":\"addRules\",\"behavior\":\"allow\",\"destination\":\"session\","
+                + "\"rules\":[{\"toolName\":\"Bash\",\"ruleContent\":\"ls\"}]}";
+        assertTrue(s.allow("r1", Json.parse("{\"command\":\"ls\"}"),
+                Suggestion.describe(Json.parse(update)).orElseThrow()));
+        assertEquals("{\"type\":\"control_response\",\"response\":{\"subtype\":\"success\",\"request_id\":\"r1\","
+                        + "\"response\":{\"behavior\":\"allow\",\"updatedInput\":{\"command\":\"ls\"},"
+                        + "\"updatedPermissions\":[" + update + "]}}}",
+                fake.received.getFirst());
+        s.close();
+    }
+
+    @Test
     void permissionPromptsAreAskedForOnTheCommandLine() {
         List<String> c = AgentSession.Options.of(EXE).withPermissionPrompts().command();
         int at = c.indexOf("--permission-prompt-tool");

@@ -258,6 +258,18 @@ public final class AgentSession implements AutoCloseable {
                 .build());
     }
 
+    /**
+     * Let the tool run, and apply {@code update}, one of the request's own {@link Suggestion}s, sent back as it came,
+     * so the CLI stops asking for what it covers.
+     */
+    public boolean allow(String requestId, JsonValue input, Suggestion update) {
+        return answer(requestId, JsonValue.Obj.builder()
+                .put("behavior", "allow")
+                .put("updatedInput", input.isObject() ? input : JsonValue.Obj.EMPTY)
+                .put("updatedPermissions", JsonValue.Arr.of(update.update()))
+                .build());
+    }
+
     /** Refuse the tool of an {@link AgentEvent.PermissionRequest}; the agent is told {@code message}. */
     public boolean deny(String requestId, String message) {
         return answer(requestId, JsonValue.Obj.builder()

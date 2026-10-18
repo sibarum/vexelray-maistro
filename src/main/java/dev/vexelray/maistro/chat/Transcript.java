@@ -61,7 +61,7 @@ public record Transcript(List<Turn> turns, long nextId) {
         List<Turn> next = new ArrayList<>(turns.size());
         for (Turn t : turns) {
             Turn s = t.live() ? t.finished(false) : t;
-            next.add(s.asking() ? s.withAsk(Turn.Ask.LAPSED) : s);
+            next.add(s.asking() ? s.settled(Turn.Ask.LAPSED) : s);
         }
         return new Transcript(next, nextId);
     }

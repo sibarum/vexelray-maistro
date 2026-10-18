@@ -112,7 +112,8 @@ public final class ConversationCodec {
             }
             Turn.Ask ask = ask(t.get("ask").asString());
             turns.add(new Turn(id, who(t.get("who").asString()), t.get("title").asString(), t.get("text").asString(),
-                    false, t.get("failed").asBool(false), chips, ask == Turn.Ask.PENDING ? Turn.Ask.LAPSED : ask));
+                    false, t.get("failed").asBool(false), chips, ask == Turn.Ask.PENDING ? Turn.Ask.LAPSED : ask,
+                    List.of()));
             highest = Math.max(highest, id);
         }
         // Never hand out an id a saved turn has, whatever the file says.

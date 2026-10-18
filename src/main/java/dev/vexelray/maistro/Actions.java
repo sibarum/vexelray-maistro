@@ -28,6 +28,7 @@ final class Actions {
         this.archive = archive;
         ui.conversation().onSend(conductor::send);
         ui.conversation().onAnswer(conductor::answer);
+        ui.conversation().onAlways(conductor::answerAlways);
         ui.conversation().onResume(this::resume);
     }
 

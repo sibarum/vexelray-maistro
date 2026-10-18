@@ -1,0 +1,13 @@
+await composer
+click composer
+type clean the build
+key ENTER
+await status.agent waiting for you: Bash
+settle
+find Always allow
+shot target/always-asking.png
+click ask.always
+await status.agent idle
+settle
+find Always allow
+shot target/always-allowed.png

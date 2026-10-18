@@ -97,6 +97,13 @@ and the status line says `waiting for you: <tool>`. Claude Code is started with 
 so it asks Maistro instead of refusing. Allow runs the tool as asked; Deny tells the agent not to retry and to ask
 instead. A turn interrupted or a process gone while it waits leaves the ask `not answered`.
 
+Under Allow and Deny are Claude Code's own suggestions for not being asked again, from the request's
+`permission_suggestions`, each in words with its scope: `until Claude Code restarts`, `in this project, for me`,
+`in this project, for everyone` or `everywhere, for me`. A scope written to a settings file is marked `(saved to
+settings)`. Choosing one allows the tool and sends the suggestion back unchanged as `updatedPermissions`, and the
+turn keeps a chip saying what was set up. Maistro offers only the kinds it can put into words, and makes no rule of
+its own.
+
 ## How it is put together
 
 Read these in this order.
@@ -234,7 +241,8 @@ ottermate --script src/test/ottermate/map-focus.txt --launch mvn.cmd compile exe
 ```
 
 `fake-claude-permission.cmd` plays `replay-permission-turn.jsonl` instead, a turn that asks to run Bash and waits
-for the answer (a `#await control_response` line in the replay), and `permission.txt` allows it once and denies it
+for the answer (a `#await control_response` line in the replay) with two standing-permission suggestions;
+`always-allow.txt` takes the first of them, and `permission.txt` allows it once and denies it
 once:
 
 ```

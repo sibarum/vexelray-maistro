@@ -38,6 +38,14 @@ final class Landmarks {
     static final String ASK_ALLOW = "ask.allow";
     static final String ASK_DENY = "ask.deny";
 
+    /** The first standing-permission offer under the oldest waiting tool turn; unbound when it has none. */
+    static final String ASK_ALWAYS = "ask.always";
+
+    /** Offer {@code n} (from 0) under the tool turn {@code turnId}. */
+    static String askAlways(long turnId, int n) {
+        return "ask." + turnId + ".always." + n;
+    }
+
     /** Allow under the tool turn {@code turnId}, whether or not it is the oldest waiting. */
     static String askAllow(long turnId) {
         return "ask." + turnId + ".allow";
