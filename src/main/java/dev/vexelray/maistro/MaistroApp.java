@@ -14,8 +14,7 @@ import dev.vexelray.framework.automation.AutomationStarter;
  * processor generates {@code MaistroAppWiring} from this.
  *
  * <p>{@code icon} is the mark the window wears: the same file {@code src/main/rc/vexelray-maistro.rc} links into the
- * executable, which the pom puts on the class path. Draw your own, render it to an {@code .ico}, and replace that
- * one file; see the README, <i>The icon</i>.
+ * executable, which the pom puts on the class path: the suite canvas's Maistro mark. See the README, <i>The icon</i>.
  */
 @VexelApp(name = Maistro.APP, title = Maistro.TITLE, width = Maistro.W, height = Maistro.H,
         icon = Maistro.ICON, starters = AutomationStarter.class)

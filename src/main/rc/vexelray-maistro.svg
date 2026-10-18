@@ -1,11 +1,20 @@
-<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><defs>
-<linearGradient id="t51" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1e2329"/><stop offset="1" stop-color="#0d1115"/></linearGradient>
-<linearGradient id="e51" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#c4d3e3" stop-opacity=".55"/><stop offset=".45" stop-color="#c4d3e3" stop-opacity="0"/></linearGradient>
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<linearGradient id="tm1" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0" stop-color="#2d0e0b"/>
+<stop offset="1" stop-color="#170605"/>
+</linearGradient>
+<linearGradient id="em1" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0" stop-color="#ffc2b8" stop-opacity=".55"/>
+<stop offset=".45" stop-color="#ffc2b8" stop-opacity="0"/>
+</linearGradient>
 </defs>
-<rect x="2" y="2" width="60" height="60" rx="15" fill="url(#t51)"/>
-<rect x="2" y="2" width="60" height="60" rx="15" fill="none" stroke="#2c343c" stroke-width="1"/>
-<circle cx="21.5" cy="21.5" r="9.5" fill="#a8c1db"/>
-<path d="M42.5 11.5 L52.5 30.5 H32.5 Z" fill="#e2edf8" stroke="#e2edf8" stroke-width="2" stroke-linejoin="round"/>
-<rect x="12" y="38" width="19" height="14" rx="3.5" fill="#e2edf8"/>
-<path d="M36.5 49 L49 36.5" stroke="#a8c1db" stroke-width="8" stroke-linecap="round"/>
-<rect x="2.6" y="2.6" width="58.8" height="58.8" rx="14.4" fill="none" stroke="url(#e51)" stroke-width="1.2"/></svg>
+<rect x="2" y="2" width="60" height="60" rx="15" fill="url(#tm1)"/>
+<rect x="2" y="2" width="60" height="60" rx="15" fill="none" stroke="#46160f" stroke-width="1"/>
+<path d="M35 32 L45 17 M51 22 L50 37 M35 42 L45 43" fill="none" stroke="#ff8577" stroke-width="3.4" stroke-linecap="round"/>
+<rect x="11" y="27" width="24" height="22" rx="4" fill="#170605" stroke="#ffd9d2" stroke-width="3.4"/>
+<path d="M11 34.5 H35" stroke="#ffd9d2" stroke-width="3.4"/>
+<circle cx="48" cy="17" r="6.5" fill="#ff8577"/>
+<circle cx="50" cy="43" r="5.2" fill="#ff8577"/>
+<rect x="2.6" y="2.6" width="58.8" height="58.8" rx="14.4" fill="none" stroke="url(#em1)" stroke-width="1.2"/>
+</svg>
