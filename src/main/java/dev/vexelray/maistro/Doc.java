@@ -1,6 +1,7 @@
 package dev.vexelray.maistro;
 
 import dev.vexelray.maistro.archive.Conversation;
+import dev.vexelray.maistro.archive.Summary;
 import dev.vexelray.maistro.chat.Transcript;
 import dev.vexelray.maistro.map.Layout;
 import dev.vexelray.maistro.map.MapGraph;
@@ -8,6 +9,7 @@ import dev.vexelray.maistro.map.MapGraph;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
@@ -34,9 +36,10 @@ import java.util.function.UnaryOperator;
  * @param mind       the mind map
  * @param status     the last thing the status line was told
  * @param meta       which conversation this is: its id, title and when it started
+ * @param library    the list of saved conversations, when it is open
  */
 record Doc(Transcript transcript, String activity, boolean busy, Panes panes, AgentInfo agent, Mind mind,
-           String status, Meta meta) {
+           String status, Meta meta, Library library) {
 
     /** Which of the three panes are on show. Each toggles on its own; the map takes whatever room is left. */
     record Panes(boolean conversation, boolean map, boolean context) {
@@ -200,9 +203,28 @@ record Doc(Transcript transcript, String activity, boolean busy, Panes panes, Ag
         }
     }
 
+    /**
+     * The list of saved conversations (Ctrl+O), shown in place of the transcript while it is open. Its rows are read
+     * from disk when it opens, so it is open and {@code loading} until they land.
+     */
+    record Library(boolean open, boolean loading, List<Summary> rows) {
+
+        static final Library CLOSED = new Library(false, false, List.of());
+        static final Library OPENING = new Library(true, true, List.of());
+
+        Library {
+            rows = List.copyOf(rows);
+        }
+
+        /** The rows landed; ignored if the list was closed meanwhile. */
+        Library loaded(List<Summary> value) {
+            return open ? new Library(true, false, value) : this;
+        }
+    }
+
     static Doc initial() {
         return new Doc(Transcript.empty(), "not started", false, Panes.ALL, AgentInfo.NONE, Mind.EMPTY, "",
-                Meta.startingAt(System.currentTimeMillis()));
+                Meta.startingAt(System.currentTimeMillis()), Library.CLOSED);
     }
 
     /** A new conversation: nothing said, no map, no agent, and the panes as they are. */
@@ -210,31 +232,49 @@ record Doc(Transcript transcript, String activity, boolean busy, Panes panes, Ag
         return initial().withPanes(panes).withStatus("New conversation");
     }
 
+    /**
+     * Conversation {@code c}, as it was saved, with the panes as they are and the list closed. The agent is not
+     * running; the next message starts it with {@code --resume}.
+     */
+    Doc resumed(Conversation c) {
+        Conversation.Agent a = c.agent();
+        return new Doc(c.transcript(), "not started", false, panes,
+                new AgentInfo(a.sessionId(), a.model(), a.cwd(), a.costUsd(), a.turns(), a.inputTokens(),
+                        a.outputTokens()),
+                new Mind(c.graph(), c.positions(), c.mindTurn(), ""),
+                "Resumed: " + (c.title().isEmpty() ? "(untitled)" : c.title()),
+                new Meta(c.id(), c.title(), c.started()), Library.CLOSED);
+    }
+
     Doc withMeta(UnaryOperator<Meta> change) {
-        return new Doc(transcript, activity, busy, panes, agent, mind, status, change.apply(meta));
+        return new Doc(transcript, activity, busy, panes, agent, mind, status, change.apply(meta), library);
+    }
+
+    Doc withLibrary(UnaryOperator<Library> change) {
+        return new Doc(transcript, activity, busy, panes, agent, mind, status, meta, change.apply(library));
     }
 
     Doc withTranscript(UnaryOperator<Transcript> change) {
-        return new Doc(change.apply(transcript), activity, busy, panes, agent, mind, status, meta);
+        return new Doc(change.apply(transcript), activity, busy, panes, agent, mind, status, meta, library);
     }
 
     Doc withActivity(String value, boolean isBusy) {
-        return new Doc(transcript, value, isBusy, panes, agent, mind, status, meta);
+        return new Doc(transcript, value, isBusy, panes, agent, mind, status, meta, library);
     }
 
     Doc withPanes(Panes value) {
-        return new Doc(transcript, activity, busy, value, agent, mind, status, meta);
+        return new Doc(transcript, activity, busy, value, agent, mind, status, meta, library);
     }
 
     Doc withAgent(UnaryOperator<AgentInfo> change) {
-        return new Doc(transcript, activity, busy, panes, change.apply(agent), mind, status, meta);
+        return new Doc(transcript, activity, busy, panes, change.apply(agent), mind, status, meta, library);
     }
 
     Doc withMind(UnaryOperator<Mind> change) {
-        return new Doc(transcript, activity, busy, panes, agent, change.apply(mind), status, meta);
+        return new Doc(transcript, activity, busy, panes, agent, change.apply(mind), status, meta, library);
     }
 
     Doc withStatus(String value) {
-        return new Doc(transcript, activity, busy, panes, agent, mind, value, meta);
+        return new Doc(transcript, activity, busy, panes, agent, mind, value, meta, library);
     }
 }

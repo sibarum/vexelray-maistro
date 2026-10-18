@@ -163,6 +163,35 @@ class UiTest {
     }
 
     @Test
+    void resumingBringsBackTheConversationAsSaved() {
+        Conductor c = wiring.conductor();
+        c.onSessionInit(new AgentEvent.SessionInit("sess-old", "claude-opus-5-5", "C:/work", "default", "2.1",
+                List.of(), Json.parse("{}")));
+        c.onAssistantText(new AgentEvent.AssistantText("m1", "Hi.\n\n```maistro-map\nnode a \"A\"\nfocus a\n```", ""));
+        c.onResult(result(true, 0.5, 1));
+        dev.vexelray.maistro.archive.Conversation saved = Archive.conversation(wiring.model().doc());
+
+        assertTrue(c.restart());
+        wiring.model().change(d -> d.withLibrary(l -> Doc.Library.OPENING));
+        assertTrue(c.resume(saved));
+        Doc doc = wiring.model().doc();
+        assertEquals(saved.transcript(), doc.transcript());
+        assertEquals("a", doc.mind().graph().focus().orElseThrow());
+        assertEquals("sess-old", doc.agent().sessionId());
+        assertEquals(0.5, doc.agent().costUsd(), 1e-9);
+        assertEquals(saved.id(), doc.meta().id());
+        assertFalse(doc.library().open(), "resuming closes the list");
+        assertFalse(doc.busy());
+    }
+
+    @Test
+    void rowsLandingAfterTheListClosedAreIgnored() {
+        assertFalse(Doc.Library.CLOSED.loaded(List.of()).open());
+        assertTrue(Doc.Library.OPENING.loaded(List.of()).open());
+        assertFalse(Doc.Library.OPENING.loaded(List.of()).loading());
+    }
+
+    @Test
     void aNewConversationIsRefusedMidTurn() {
         Conductor c = wiring.conductor();
         c.onTextDelta(new AgentEvent.TextDelta(0, "half a rep", ""));

@@ -119,8 +119,8 @@ final class Recipes {
      * Every command, and the chords for them.
      */
     @Provides
-    Actions actions(Gui gui, Model model, Ui ui, Conductor conductor) {
-        Actions actions = new Actions(gui, model, ui, conductor);
+    Actions actions(Gui gui, Model model, Ui ui, Conductor conductor, Archive archive) {
+        Actions actions = new Actions(gui, model, ui, conductor, archive);
         actions.shortcuts();
         return actions;
     }

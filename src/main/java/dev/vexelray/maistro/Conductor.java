@@ -5,6 +5,7 @@ import dev.vexelray.maistro.agent.AgentListener;
 import dev.vexelray.maistro.agent.AgentSession;
 import dev.vexelray.maistro.agent.ClaudeCli;
 import dev.vexelray.maistro.agent.JsonValue;
+import dev.vexelray.maistro.archive.Conversation;
 import dev.vexelray.maistro.chat.Turn;
 import dev.vexelray.maistro.map.MapDelta;
 import dev.vexelray.maistro.map.MapGraph;
@@ -20,6 +21,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.UnaryOperator;
 
 /**
  * The agent's side of the conversation: one Claude Code process, and what turns its events into changes to the
@@ -166,15 +168,30 @@ final class Conductor implements AgentListener, AutoCloseable {
      * @return whether a new conversation started
      */
     boolean restart() {
+        return switchTo("", Doc::restarted);
+    }
+
+    /**
+     * Carry on with saved conversation {@code c}: as {@link #restart}, but the session becomes {@code c}, and the
+     * next message starts Claude Code with {@code --resume} and {@code c}'s session id, so the agent has it too.
+     *
+     * @return whether it was resumed; not while a turn is running
+     */
+    boolean resume(Conversation c) {
+        return switchTo(c.agent().sessionId(), d -> d.resumed(c));
+    }
+
+    /** End this conversation's process, and make {@code next} the session, with {@code sessionId} to resume. */
+    private boolean switchTo(String sessionId, UnaryOperator<Doc> next) {
         if (model.doc().busy()) {
-            model.say("The agent is working. Interrupt it (Escape) or wait for the reply, then start a new one.");
+            model.say("The agent is working. Interrupt it (Escape) or wait for the reply, then switch.");
             return false;
         }
         AgentSession s;
         synchronized (this) {
             s = session;
             session = null;
-            lastSessionId = "";
+            lastSessionId = sessionId;
             generation++;
         }
         tools.clear();
@@ -182,7 +199,7 @@ final class Conductor implements AgentListener, AutoCloseable {
         if (s != null) {
             s.close();
         }
-        model.change(Doc::restarted);
+        model.change(next);
         return true;
     }
 

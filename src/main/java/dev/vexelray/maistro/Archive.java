@@ -2,6 +2,7 @@ package dev.vexelray.maistro;
 
 import dev.vexelray.maistro.archive.Conversation;
 import dev.vexelray.maistro.archive.ConversationCodec;
+import dev.vexelray.maistro.archive.Summary;
 import dev.vexelray.maistro.chat.Transcript;
 import dev.vexelray.maistro.map.Layout;
 import dev.vexelray.maistro.map.MapGraph;
@@ -9,11 +10,15 @@ import sibarum.probe.Log;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Consumer;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicLong;
@@ -135,6 +140,51 @@ final class Archive implements AutoCloseable {
                 new Conversation.Agent(a.sessionId(), a.model(), a.cwd(), a.costUsd(), a.turns(), a.inputTokens(),
                         a.outputTokens()),
                 d.transcript(), d.mind().graph(), d.mind().positions(), d.mind().turn());
+    }
+
+    /**
+     * Every saved conversation, newest first, read on the offload lane and handed to {@code done} there. A file that
+     * does not read is left out, and logged.
+     */
+    void list(Consumer<List<Summary>> done) {
+        offload.execute(() -> done.accept(summaries()));
+    }
+
+    /** {@link #list}'s work, on the calling thread. Disk I/O: never on the frame loop or a listener. */
+    List<Summary> summaries() {
+        List<Summary> out = new ArrayList<>();
+        if (!Files.isDirectory(dir)) {
+            return out;
+        }
+        try (DirectoryStream<Path> files = Files.newDirectoryStream(dir, "*.json")) {
+            for (Path f : files) {
+                try {
+                    out.add(Summary.of(ConversationCodec.decode(Files.readString(f, StandardCharsets.UTF_8))));
+                } catch (IOException | IllegalArgumentException e) {
+                    LOG.warn("could not read conversation {}", f, e);
+                }
+            }
+        } catch (IOException e) {
+            LOG.warn("could not list conversations in {}", dir, e);
+        }
+        out.sort(Summary.NEWEST_FIRST);
+        return out;
+    }
+
+    /**
+     * Read conversation {@code id} on the offload lane, and hand it to {@code done} there, or say to {@code failed}
+     * why it could not be.
+     */
+    void load(String id, Consumer<Conversation> done, Consumer<String> failed) {
+        offload.execute(() -> {
+            Path f = file(id);
+            try {
+                done.accept(ConversationCodec.decode(Files.readString(f, StandardCharsets.UTF_8)));
+            } catch (IOException | IllegalArgumentException e) {
+                LOG.warn("could not read conversation {}", f, e);
+                failed.accept("Could not open that conversation: " + e.getMessage());
+            }
+        });
     }
 
     /** The file conversation {@code id} is kept in. */

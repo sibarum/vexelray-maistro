@@ -74,9 +74,10 @@ groups the button with other Java programs, and pinning it pins Java. The native
 | Keys | Does |
 | --- | --- |
 | Enter (in the composer) | send |
-| Escape | interrupt the agent's turn |
+| Escape | close the list of conversations if it is open, else interrupt the agent's turn |
 | Ctrl+L | put the keyboard in the composer |
 | Ctrl+N | a new conversation (refused while the agent is mid-turn: Escape first) |
+| Ctrl+O | the saved conversations, newest first; click one, or Enter, to carry on with it |
 | Ctrl+1 / Ctrl+2 / Ctrl+3 | show or hide the conversation, the mind map, the context stream |
 | Ctrl+= / Ctrl+- / Ctrl+0 | zoom |
 
@@ -243,7 +244,9 @@ ottermate --script src/test/ottermate/permission.txt --launch mvn.cmd compile ex
 A run under `ottermate` that ends a turn saves the conversation into your real `~/.vexelray-maistro`. To keep a check
 out of it, give the run a home of its own. That moves the settings and the log there too
 (`target/ottermate-home/logs/`), so read the log there. `new-conversation.txt` (with `fake-claude.cmd`) and
-`new-conversation-refused.txt` (with `fake-claude-permission.cmd`) check Ctrl+N that way:
+`new-conversation-refused.txt` (with `fake-claude-permission.cmd`) check Ctrl+N that way, and `resume.txt` (with
+`fake-claude.cmd`) saves a conversation, resumes it from Ctrl+O and checks the agent restarts with `--resume` (in the
+log):
 
 ```
 ottermate --script src/test/ottermate/new-conversation.txt --launch mvn.cmd compile exec:exec -Dautomation=0 "-Dapp.jvmArgs=-Dvexelray-maistro.home=C:/path/to/vexelray-maistro/target/ottermate-home" "-Dapp.args=--claude=src/test/ottermate/fake-claude.cmd"

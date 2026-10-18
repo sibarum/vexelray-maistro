@@ -84,6 +84,7 @@ final class Ui {
         map.node().visible(doc.panes().map());
         context.node().visible(doc.panes().context());
         conversation.show(doc.transcript());
+        conversation.showLibrary(doc.library());
         conversation.showAnchor(doc.mind().anchorNode().map(dev.vexelray.maistro.map.Node::shownLabel).orElse(""));
         context.show(doc.agent());
         context.show(doc.mind().graph());

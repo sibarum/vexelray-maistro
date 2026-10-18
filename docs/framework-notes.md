@@ -110,3 +110,15 @@ What it costs: every application's shutdown path (saving, flushing, closing a ch
 end. What the framework could do: put the window controls in the tree with landmarks (`window.close`), or give
 `ottermate` a `close` verb that asks the window to close as a person would, then waits for the process to exit and
 reports its exit code.
+
+## FN-8 · No quick-pick: choosing one item from a list is built from parts 🔬
+
+Ctrl+O wanted the usual "pick a recent one" list: open on a key, the newest selected, Enter or a click to choose,
+Escape to dismiss. The framework has the parts (`ListView` with `onActivate`, `onRowClicked` and a
+`SelectionModel`), but no widget that is the whole thing. `Modal` takes only buttons, and the framework's
+`Dialogs` are native file dialogs. So `ConversationPane` puts a `ListView` in the transcript's place, selects the
+first row by hand, moves the keyboard into it, and routes Escape through the application's global claim. That is
+about 60 lines, and every application with "recent files", "switch to" or "run command" will write them again.
+
+What the framework could do: a `QuickPick<T>` (or `Palette`) taking items, a label function and a chosen callback.
+It would float over the window, filter as you type, and close itself on Escape or a choice.

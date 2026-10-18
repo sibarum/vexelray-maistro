@@ -48,6 +48,13 @@ final class Landmarks {
         return "ask." + turnId + ".deny";
     }
 
+    /** The list of saved conversations (Ctrl+O), and one row of it by the conversation's id. */
+    static final String CONVERSATIONS = "conversations";
+
+    static String conversationRow(String id) {
+        return CONVERSATIONS + "." + id;
+    }
+
     /** The mind map, the main stage. */
     static final String MAP = "map";
 

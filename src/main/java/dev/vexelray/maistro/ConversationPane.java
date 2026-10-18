@@ -11,12 +11,16 @@ import dev.vexelray.gui.core.style.Role;
 import dev.vexelray.gui.icons.Icon;
 import dev.vexelray.gui.widget.Button;
 import dev.vexelray.gui.widget.IconButton;
+import dev.vexelray.gui.widget.ListView;
+import dev.vexelray.gui.widget.SelectionModel;
+import dev.vexelray.maistro.archive.Summary;
 import dev.vexelray.gui.widget.TextField;
 import dev.vexelray.maistro.chat.Transcript;
 import dev.vexelray.maistro.chat.Turn;
 import dev.vexelray.maistro.map.MapProtocol;
 import dev.vexelray.maistro.text.Markdown;
 
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.HashMap;
@@ -53,6 +57,15 @@ final class ConversationPane {
     /** Over the composer while the next message starts from a node: which node, and a button to let it go. */
     private final Node from;
     private final Node fromLabel;
+
+    /** A saved conversation's row: its title over when it was saved. */
+    private static final float LIBRARY_ROW_REM = 3.25f;
+
+    private ListView<Summary> list;
+    private Node library;
+    private Node libraryHint;
+    private List<Summary> listed = List.of();
+    private volatile Consumer<Summary> resume = s -> { };
 
     private volatile Consumer<String> send = text -> { };
     private volatile Answer answer = (turn, allow) -> { };
@@ -131,8 +144,73 @@ final class ConversationPane {
                 .background(gui.theme().color(Role.PANEL))
                 .border(Length.dp(1), Look.RULE)
                 .alignItems(AlignItems.STRETCH)
-                .children(header(gui, "CONVERSATION"), transcript, from, composerRow);
+                .children(header(gui, "CONVERSATION"), transcript, library(), from, composerRow);
         gui.landmark(Landmarks.CONVERSATION, root);
+    }
+
+    /**
+     * The saved conversations (Ctrl+O), in the transcript's place while open: newest first, each row its title and
+     * when it was last saved. A click, or Enter on the selected row, resumes one. Built once; {@link #showLibrary}
+     * fills it.
+     */
+    private Node library() {
+        list = new ListView<Summary>(gui, LIBRARY_ROW_REM, this::libraryRow, SelectionModel.single())
+                .onRowClicked(s -> resume.accept(s))
+                .onActivate(s -> resume.accept(s));
+        list.node().width(Length.FILL).height(Length.grow(1f));
+        gui.landmark(Landmarks.CONVERSATIONS, list.node());
+        libraryHint = gui.text("").font(Type.UI).textSize(Type.BODY).textColor(gui.theme().color(Role.FAINT))
+                .wordWrap(true).width(Length.FILL);
+        library = gui.column()
+                .width(Length.FILL).height(Length.grow(1f))
+                .padding(Type.GUTTER, Type.GUTTER)
+                .gap(Type.TIGHT)
+                .alignItems(AlignItems.STRETCH)
+                .children(gui.text("SAVED CONVERSATIONS · click or Enter to resume · Escape to close")
+                                .font(Type.MONO).textSize(Type.LABEL).textColor(gui.theme().color(Role.DIM)),
+                        libraryHint, list.node())
+                .visible(false);
+        return library;
+    }
+
+    private Node libraryRow(Gui g, Summary s) {
+        Node row = g.column()
+                .width(Length.FILL)
+                .padding(Length.dp(4), Length.dp(8))
+                .gap(Length.dp(2))
+                .children(g.text(s.shownTitle()).font(Type.UI).textSize(Type.BODY)
+                                .textColor(g.theme().color(Role.INK)),
+                        g.text(s.detail(ZoneId.systemDefault())).font(Type.MONO).textSize(Type.LABEL)
+                                .textColor(g.theme().color(Role.FAINT)));
+        g.landmark(Landmarks.conversationRow(s.id()), row);
+        return row;
+    }
+
+    /** What clicking a saved conversation does. */
+    void onResume(Consumer<Summary> handler) {
+        this.resume = handler;
+    }
+
+    /** Show the list of saved conversations in the transcript's place, or the transcript. */
+    synchronized void showLibrary(Doc.Library l) {
+        library.visible(l.open());
+        transcript.visible(!l.open());
+        boolean nothing = !l.loading() && l.rows().isEmpty();
+        libraryHint.text(l.loading() ? "Reading saved conversations…"
+                : nothing ? "No saved conversations yet. One is saved each time a reply ends." : "");
+        libraryHint.visible(l.open() && (l.loading() || nothing));
+        if (!l.rows().equals(listed)) {
+            listed = l.rows();
+            list.items(listed);
+            if (!listed.isEmpty()) {
+                list.selection().at(listed.getFirst());
+            }
+        }
+    }
+
+    /** Put the keyboard in the list of saved conversations, so arrows and Enter work at once. */
+    void focusLibrary() {
+        gui.focus(list.node());
     }
 
     /** A pane's label: the mono, small, uppercase and faint, as the canvas heads every pane. */

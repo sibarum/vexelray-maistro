@@ -19,9 +19,9 @@ longer list this is drawn from.
 - [ ] True forks: a turn from a node in a fresh Claude Code session given only its neighbourhood, shown as a
       branch, merged back as new edges (guide, *Replies built to be forked*). Today a node only narrows where the
       one session looks (`Conductor.fromNode`).
-- [ ] Ctrl+O: list the saved conversations (`Archive`, one JSON file each) and resume one, its transcript and map
-      from the file and the agent with `--resume` (slice 2 of the conversations proposal).
-- [ ] Conversations, later: delete, rename, search, and Claude Code sessions started outside Maistro.
+- [ ] Conversations, later: delete, rename, search, and Claude Code sessions started outside Maistro. A click on a
+      row resumes through `onRowClicked`, which no script exercises yet (`resume.txt` uses Enter): rows are
+      landmarked by id, which a script cannot know in advance.
 - [ ] See `Archive.close()` save a conversation left mid-turn in a real shutdown. It is unit-tested, but a script
       cannot close the window (framework-notes FN-7).
 

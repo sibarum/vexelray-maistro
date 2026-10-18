@@ -1,0 +1,32 @@
+await composer
+click composer
+type hello
+key ENTER
+await context.focus KV cache
+await status.agent idle
+key CTRL+N
+await status.message New conversation
+key CTRL+O
+await conversations
+settle
+find hello
+shot target/resume-list.png
+key ENTER
+await status.message Resumed: hello
+await context.focus KV cache
+settle
+find Surprise drives
+shot target/resume-resumed.png
+click composer
+type and again
+key ENTER
+await status.agent idle
+settle
+shot target/resume-sent.png
+key CTRL+O
+await conversations
+settle
+key ESCAPE
+settle
+find SAVED CONVERSATIONS
+find and again
