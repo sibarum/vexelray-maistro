@@ -24,6 +24,7 @@ final class Actions {
         this.ui = ui;
         this.conductor = conductor;
         ui.conversation().onSend(conductor::send);
+        ui.conversation().onAnswer(conductor::answer);
     }
 
     /**

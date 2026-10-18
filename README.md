@@ -24,7 +24,7 @@ on its own: run it once with `/login`, or name another with `--claude`.
 ```
 mvn compile exec:exec "-Dapp.args=--claude=C:/path/claude.exe"   # which CLI to run
 mvn compile exec:exec "-Dapp.args=--model=sonnet --cwd=C:/work"  # its model, and the folder it works in
-mvn compile exec:exec "-Dapp.args=--permissionMode=acceptEdits"  # default is "default": anything needing approval is denied
+mvn compile exec:exec "-Dapp.args=--permissionMode=acceptEdits"  # default is "default": Maistro asks before anything needing approval
 mvn compile exec:exec -Dautomation=0                             # a driving socket on a free port (see Taking a screenshot)
 mvn test                                                         # the agent protocol, the map, the real tree headless
 ```
@@ -89,6 +89,11 @@ Clicking a node focuses it, and the next message starts from it: `from · <label
 it go), and the agent is told which node and given its neighbourhood, the node and what it links to directly, as a
 `maistro-map` block ahead of the message. It is used once. The agent still has the whole conversation; this says
 where to look, and is not a fork.
+
+When the agent wants to run a tool that needs approval, its tool turn waits with **Allow** and **Deny** under it,
+and the status line says `waiting for you: <tool>`. Claude Code is started with `--permission-prompt-tool stdio`,
+so it asks Maistro instead of refusing. Allow runs the tool as asked; Deny tells the agent not to retry and to ask
+instead. A turn interrupted or a process gone while it waits leaves the ask `not answered`.
 
 ## How it is put together
 
@@ -218,11 +223,18 @@ finish, and `click composer` then `type ...` and `key ENTER` sends one. `otterma
 one recorded turn (`replay-map-turn.jsonl`) whose `maistro-map` block puts three nodes on the map, and writes what
 it was sent to `target/fake-claude-stdin.txt`, which is how to see what the agent is really told. `map-focus.txt`
 sends a message, clicks a node, sends a second message from it, then picks another node and lets it go with ✕,
-leaving its
-screenshots in `target/`. Copy it to check anything that needs a reply on screen.
+leaving its screenshots in `target/`. Copy it to check anything that needs a reply on screen.
 
 ```
 ottermate --script src/test/ottermate/map-focus.txt --launch mvn.cmd compile exec:exec -Dautomation=0 "-Dapp.args=--claude=src/test/ottermate/fake-claude.cmd"
+```
+
+`fake-claude-permission.cmd` plays `replay-permission-turn.jsonl` instead, a turn that asks to run Bash and waits
+for the answer (a `#await control_response` line in the replay), and `permission.txt` allows it once and denies it
+once:
+
+```
+ottermate --script src/test/ottermate/permission.txt --launch mvn.cmd compile exec:exec -Dautomation=0 "-Dapp.args=--claude=src/test/ottermate/fake-claude-permission.cmd"
 ```
 
 ## Logging

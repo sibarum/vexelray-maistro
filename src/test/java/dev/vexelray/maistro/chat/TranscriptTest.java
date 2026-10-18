@@ -12,6 +12,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class TranscriptTest {
 
     @Test
+    void settlingLapsesAnAskNobodyAnswered() {
+        Transcript t = Transcript.empty()
+                .append(id -> Turn.tool(id, "Bash", "ls").withAsk(Turn.Ask.PENDING))
+                .append(id -> Turn.tool(id, "Edit", "a.txt").withAsk(Turn.Ask.ALLOWED));
+        assertEquals(1, t.asking().size());
+        Transcript settled = t.settle();
+        assertEquals(Turn.Ask.LAPSED, settled.turns().get(0).ask());
+        assertEquals(Turn.Ask.ALLOWED, settled.turns().get(1).ask());
+        assertTrue(settled.asking().isEmpty());
+    }
+
+    @Test
     void appendingGivesEachTurnTheNextId() {
         Transcript t = Transcript.empty()
                 .append(id -> Turn.human(id, "hello"))

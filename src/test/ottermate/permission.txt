@@ -1,0 +1,21 @@
+await composer
+click composer
+type clean the build
+key ENTER
+await status.agent waiting for you: Bash
+settle
+shot target/permission-asking.png
+click ask.allow
+await status.agent idle
+settle
+find allowed
+shot target/permission-allowed.png
+click composer
+type and again
+key ENTER
+await status.agent waiting for you: Bash
+click ask.deny
+await status.agent idle
+settle
+find denied
+shot target/permission-denied.png

@@ -208,6 +208,24 @@ class EventParserTest {
         assertTrue(EventParser.parse(null).isEmpty());
     }
 
+    /** The shape the Agent SDK documents for {@code can_use_tool}; not yet checked against a recorded real one. */
+    @Test
+    void aPermissionPromptIsItsOwnEvent() {
+        String line = "{\"type\":\"control_request\",\"request_id\":\"r-7\",\"request\":{\"subtype\":\"can_use_tool\","
+                + "\"tool_name\":\"Bash\",\"input\":{\"command\":\"rm -rf build\"},\"tool_use_id\":\"toolu_1\","
+                + "\"permission_suggestions\":[]}}";
+        AgentEvent.PermissionRequest p = (AgentEvent.PermissionRequest) EventParser.parse(line).getFirst();
+        assertEquals("r-7", p.requestId());
+        assertEquals("Bash", p.toolName());
+        assertEquals("rm -rf build", p.input().get("command").asString());
+        assertEquals("toolu_1", p.toolUseId());
+
+        AgentEvent.ControlRequest other = (AgentEvent.ControlRequest) EventParser.parse(
+                "{\"type\":\"control_request\",\"request_id\":\"r-8\",\"request\":{\"subtype\":\"hook_callback\"}}")
+                .getFirst();
+        assertEquals("hook_callback", other.subtype());
+    }
+
     @Test
     void multiBlockAssistantLineYieldsOneEventPerBlock() {
         String line = "{\"type\":\"assistant\",\"parent_tool_use_id\":\"toolu_parent\",\"message\":{\"id\":\"m1\","
@@ -220,13 +238,14 @@ class EventParserTest {
     }
 
     @Test
-    void controlRequestFromTheCli() {
+    void aPermissionPromptMissingFieldsIsStillAsked() {
         Recorder r = parseAll(List.of("{\"type\":\"control_request\",\"request_id\":\"r9\",\"request\":"
                 + "{\"subtype\":\"can_use_tool\",\"tool_name\":\"Bash\"}}"));
-        AgentEvent.ControlRequest c = r.all(AgentEvent.ControlRequest.class).getFirst();
-        assertEquals("r9", c.requestId());
-        assertEquals("can_use_tool", c.subtype());
-        assertEquals("Bash", c.request().get("tool_name").asString());
+        AgentEvent.PermissionRequest p = r.all(AgentEvent.PermissionRequest.class).getFirst();
+        assertEquals("r9", p.requestId());
+        assertEquals("Bash", p.toolName());
+        assertEquals("", p.toolUseId());
+        assertFalse(p.input().isObject());
     }
 
     @Test

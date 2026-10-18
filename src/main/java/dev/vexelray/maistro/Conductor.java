@@ -65,6 +65,8 @@ final class Conductor implements AgentListener, AutoCloseable {
     private final Launch launch;
     /** Tool-use id to the transcript turn showing it. */
     private final Map<String, Long> tools = new ConcurrentHashMap<>();
+    /** Tool turn id to the permission request it waits on: what answering it needs, and nothing the window shows. */
+    private final Map<Long, Asked> asks = new ConcurrentHashMap<>();
 
     private AgentSession session;
     private String lastSessionId = "";
@@ -130,6 +132,7 @@ final class Conductor implements AgentListener, AutoCloseable {
         Path exe = found.location().orElseThrow().executable();
         AgentSession.Options options = AgentSession.Options.of(exe)
                 .withAppendSystemPrompt(CONTEXT + "\n\n" + MapProtocol.INSTRUCTIONS)
+                .withPermissionPrompts()
                 .withModel(blankToNull(launch.model()))
                 .withPermissionMode(blankToNull(launch.permissionMode()))
                 .withWorkingDirectory(launch.cwd().isBlank() ? null : Path.of(launch.cwd()))
@@ -261,6 +264,76 @@ final class Conductor implements AgentListener, AutoCloseable {
         })).withActivity("thinking", true));
     }
 
+    /** What answering a permission request needs: its id, and the input to let the tool run with. */
+    private record Asked(String requestId, String tool, JsonValue input) {
+    }
+
+    /** What the agent is told when the human says no. */
+    static final String DENIED = "The human denied this in Maistro. Do not retry it; ask what they want instead.";
+
+    /**
+     * The agent wants to run a tool that needs the human's say-so. Its tool turn (or a new one, if the CLI named no
+     * {@code tool_use} this session has seen) waits with Allow and Deny under it. This returns at once: the CLI
+     * waits for the answer, the reader thread does not.
+     */
+    @Override
+    public void onPermissionRequest(AgentEvent.PermissionRequest e) {
+        Long known = e.toolUseId().isEmpty() ? null : tools.get(e.toolUseId());
+        String detail = describe(e.toolName(), e.input());
+        Asked asked = new Asked(e.requestId(), e.toolName(), e.input());
+        model.change(d -> {
+            boolean seen = known != null && d.transcript().turns().stream().anyMatch(t -> t.id() == known);
+            Doc next = seen ? d : d.withTranscript(t -> t.append(id -> Turn.tool(id, e.toolName(), detail)));
+            long turn = seen ? known : next.transcript().last().id();
+            // Recorded before the buttons can be drawn, so no click finds it missing. A commit's function may run
+            // more than once, and the last run is the one committed, so each run drops what an earlier one put.
+            asks.values().remove(asked);
+            asks.put(turn, asked);
+            return next.withTranscript(t -> t.change(turn, r -> r.withAsk(Turn.Ask.PENDING)))
+                    .withActivity("waiting for you: " + e.toolName(), true);
+        });
+    }
+
+    /** A request Maistro has no answer for gets an error rather than silence, which would stall the CLI. */
+    @Override
+    public void onControlRequest(AgentEvent.ControlRequest e) {
+        LOG.debug("refusing control request {} ({})", e.requestId(), e.subtype());
+        AgentSession s = current();
+        if (s != null) {
+            s.refuse(e.requestId(), "Maistro does not handle " + e.subtype());
+        }
+    }
+
+    /**
+     * The human answered the tool turn {@code turn}: allow it to run, or deny it. On a worker. A second answer to the
+     * same turn (a double click) does nothing.
+     */
+    void answer(long turn, boolean allow) {
+        Asked a = asks.remove(turn);
+        if (a == null) {
+            return;
+        }
+        AgentSession s = current();
+        boolean sent = s != null && (allow ? s.allow(a.requestId(), a.input()) : s.deny(a.requestId(), DENIED));
+        if (!sent) {
+            failed("Could not answer Claude Code: its process has gone.");
+            return;
+        }
+        model.change(d -> d.withTranscript(t -> t.change(turn,
+                        r -> r.withAsk(allow ? Turn.Ask.ALLOWED : Turn.Ask.DENIED)))
+                .withActivity(waitingOr(d, turn, allow ? "running " + a.tool() : "thinking"), true));
+    }
+
+    /** What the agent is doing once {@code answered} is: still waiting on another ask, or {@code otherwise}. */
+    private static String waitingOr(Doc d, long answered, String otherwise) {
+        for (Turn t : d.transcript().asking()) {
+            if (t.id() != answered) {
+                return "waiting for you: " + t.title();
+            }
+        }
+        return otherwise;
+    }
+
     @Override
     public void onApiError(AgentEvent.ApiError e) {
         String what = e.text().isEmpty() ? e.error() : e.text();
@@ -272,6 +345,7 @@ final class Conductor implements AgentListener, AutoCloseable {
     public void onResult(AgentEvent.Result e) {
         remember(e.sessionId());
         tools.clear();
+        asks.clear();
         model.change(d -> {
             Doc next = d.withTranscript(t -> t.settle())
                     .withActivity("idle", false)
@@ -295,6 +369,7 @@ final class Conductor implements AgentListener, AutoCloseable {
     @Override
     public void onProcessExit(AgentEvent.ProcessExit e) {
         tools.clear();
+        asks.clear();
         synchronized (this) {
             session = null;
         }

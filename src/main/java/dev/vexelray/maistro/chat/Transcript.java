@@ -53,13 +53,28 @@ public record Transcript(List<Turn> turns, long nextId) {
         return null;
     }
 
-    /** Stop everything that is still growing, as when the agent's turn ends or its process goes. */
+    /**
+     * Stop everything that is still growing, as when the agent's turn ends or its process goes. A tool still waiting
+     * on the human will now never be answered, so its ask lapses.
+     */
     public Transcript settle() {
         List<Turn> next = new ArrayList<>(turns.size());
         for (Turn t : turns) {
-            next.add(t.live() ? t.finished(false) : t);
+            Turn s = t.live() ? t.finished(false) : t;
+            next.add(s.asking() ? s.withAsk(Turn.Ask.LAPSED) : s);
         }
         return new Transcript(next, nextId);
+    }
+
+    /** The turns waiting on the human, oldest first. */
+    public List<Turn> asking() {
+        List<Turn> out = new ArrayList<>();
+        for (Turn t : turns) {
+            if (t.asking()) {
+                out.add(t);
+            }
+        }
+        return out;
     }
 
     public int size() {

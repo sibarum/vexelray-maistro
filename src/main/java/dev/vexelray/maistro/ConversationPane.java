@@ -9,6 +9,7 @@ import dev.vexelray.gui.core.layout.LayoutEnums.ScrollLock;
 import dev.vexelray.gui.core.layout.Length;
 import dev.vexelray.gui.core.style.Role;
 import dev.vexelray.gui.icons.Icon;
+import dev.vexelray.gui.widget.Button;
 import dev.vexelray.gui.widget.IconButton;
 import dev.vexelray.gui.widget.TextField;
 import dev.vexelray.maistro.chat.Transcript;
@@ -16,8 +17,10 @@ import dev.vexelray.maistro.chat.Turn;
 import dev.vexelray.maistro.map.MapProtocol;
 import dev.vexelray.maistro.text.Markdown;
 
+import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 
@@ -52,6 +55,12 @@ final class ConversationPane {
     private final Node fromLabel;
 
     private volatile Consumer<String> send = text -> { };
+    private volatile Answer answer = (turn, allow) -> { };
+
+    /** What pressing Allow or Deny under a tool turn does. */
+    interface Answer {
+        void answer(long turn, boolean allow);
+    }
 
     /** The conversation; {@code unanchor} is pressing the ✕ on the {@code from} chip. */
     ConversationPane(Gui gui, Runnable unanchor) {
@@ -144,6 +153,11 @@ final class ConversationPane {
         this.send = handler;
     }
 
+    /** What Allow and Deny under a waiting tool turn do. */
+    void onAnswer(Answer handler) {
+        this.answer = handler;
+    }
+
     /** Say which node the next message starts from: its label, or empty for none. */
     void showAnchor(String label) {
         fromLabel.text(label.isEmpty() ? "" : "from · " + label);
@@ -186,6 +200,15 @@ final class ConversationPane {
         if (grew) {
             transcript.scrollToEdge();
         }
+        List<Turn> asking = t.asking();
+        if (asking.isEmpty()) {
+            gui.clearLandmark(Landmarks.ASK_ALLOW);
+            gui.clearLandmark(Landmarks.ASK_DENY);
+        } else {
+            TurnView oldest = views.get(asking.getFirst().id());
+            gui.landmark(Landmarks.ASK_ALLOW, oldest.allow.node());
+            gui.landmark(Landmarks.ASK_DENY, oldest.deny.node());
+        }
     }
 
     /** One turn's nodes: its heading, its body, and the chips saying what it touched. */
@@ -195,14 +218,29 @@ final class ConversationPane {
         final Node heading;
         final Node body;
         final Node chips;
+        /** Allow and Deny, shown while the tool waits on the human. */
+        final Node ask;
+        final Button allow;
+        final Button deny;
         Turn shown;
+        /** The chips on show, and what they say. */
+        Node[] chipList = new Node[0];
+        List<String> chipLabels = List.of();
 
         TurnView(Turn turn) {
             heading = gui.text("").font(Type.MONO).textSize(Type.LABEL);
             body = gui.text("").wordWrap(true).width(Length.FILL);
             chips = gui.row().gap(Type.TIGHT);
+            long id = turn.id();
+            allow = new Button(gui, "Allow").kind(Button.Kind.PRIMARY).onPress(() -> answer.answer(id, true));
+            deny = new Button(gui, "Deny").kind(Button.Kind.SECONDARY).onPress(() -> answer.answer(id, false));
+            gui.landmark(Landmarks.askAllow(id), allow.node());
+            gui.landmark(Landmarks.askDeny(id), deny.node());
+            ask = gui.row().gap(Type.TIGHT).alignItems(AlignItems.CENTER)
+                    .children(allow.node(), deny.node())
+                    .visible(false);
             root = gui.column().width(Length.FILL).gap(Type.TIGHT).alignItems(AlignItems.STRETCH)
-                    .children(heading, body, chips);
+                    .children(heading, body, ask, chips);
             update(turn);
         }
 
@@ -225,19 +263,32 @@ final class ConversationPane {
             if (turn.who() == Turn.Who.AGENT) {
                 body.spans(Markdown.spans(text, markup));
             }
-            chips.children(chipNodes(turn));
-            chips.visible(!turn.chips().isEmpty());
+            ask.visible(turn.asking());
+            List<String> labels = new ArrayList<>(turn.chips());
+            if (!turn.ask().chip().isEmpty()) {
+                labels.add(turn.ask().chip());
+            }
+            if (!labels.equals(chipLabels)) {
+                // children(...) appends, so the old chips are taken out first.
+                for (Node old : chipList) {
+                    old.remove();
+                }
+                chipList = chipNodes(labels);
+                chipLabels = labels;
+                chips.children(chipList);
+            }
+            chips.visible(!labels.isEmpty());
         }
 
-        private Node[] chipNodes(Turn turn) {
-            Node[] nodes = new Node[turn.chips().size()];
+        private Node[] chipNodes(List<String> labels) {
+            Node[] nodes = new Node[labels.size()];
             for (int i = 0; i < nodes.length; i++) {
                 nodes[i] = gui.row()
                         .padding(Length.dp(2), Length.dp(8))
                         .corner(Length.dp(4))
                         .border(Length.dp(1), Look.RULE)
                         .direction(Direction.ROW)
-                        .children(gui.text(turn.chips().get(i)).font(Type.MONO).textSize(Type.LABEL)
+                        .children(gui.text(labels.get(i)).font(Type.MONO).textSize(Type.LABEL)
                                 .textColor(Look.SETTLED));
             }
             return nodes;

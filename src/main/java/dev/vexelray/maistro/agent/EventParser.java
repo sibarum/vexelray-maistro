@@ -20,7 +20,8 @@ import java.util.List;
  *   <li>{@code stream_event}: {@link AgentEvent.TextDelta}, {@link AgentEvent.ThinkingDelta},
  *       {@link AgentEvent.ToolInputDelta}, else {@link AgentEvent.StreamMarker}</li>
  *   <li>{@code result}: {@link AgentEvent.Result}</li>
- *   <li>{@code control_response} / {@code control_request}: {@link AgentEvent.ControlResponse},
+ *   <li>{@code control_response}: {@link AgentEvent.ControlResponse}</li>
+ *   <li>{@code control_request}: {@link AgentEvent.PermissionRequest} for {@code can_use_tool}, else
  *       {@link AgentEvent.ControlRequest}</li>
  * </ul>
  */
@@ -52,8 +53,7 @@ public final class EventParser {
             case "stream_event" -> stream(line, v, out);
             case "result" -> out.add(result(v));
             case "control_response" -> out.add(controlResponse(v));
-            case "control_request" -> out.add(new AgentEvent.ControlRequest(v.get("request_id").asString(),
-                    v.get("request").get("subtype").asString(), v.get("request")));
+            case "control_request" -> out.add(controlRequest(v));
             default -> out.add(new AgentEvent.Unknown(line, "unknown line type '" + type + "'"));
         }
         return out;
@@ -178,6 +178,18 @@ public final class EventParser {
         return new AgentEvent.Result(!isError, v.get("subtype").asString(), text, v.get("session_id").asString(),
                 v.get("total_cost_usd").asDouble(0), v.get("duration_ms").asLong(0), v.get("duration_api_ms").asLong(0),
                 (int) v.get("num_turns").asLong(0), usage, v.get("terminal_reason").asString(), v);
+    }
+
+    /** A request from the CLI: a permission prompt as its own record, anything else as it came. */
+    private static AgentEvent controlRequest(JsonValue v) {
+        String id = v.get("request_id").asString();
+        JsonValue r = v.get("request");
+        String subtype = r.get("subtype").asString();
+        if (subtype.equals("can_use_tool")) {
+            return new AgentEvent.PermissionRequest(id, r.get("tool_name").asString(), r.get("input"),
+                    r.get("tool_use_id").asString(), r);
+        }
+        return new AgentEvent.ControlRequest(id, subtype, r);
     }
 
     private static AgentEvent controlResponse(JsonValue v) {

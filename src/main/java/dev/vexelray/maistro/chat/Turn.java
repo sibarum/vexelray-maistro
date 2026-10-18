@@ -17,8 +17,10 @@ import java.util.List;
  * @param live   still growing: a reply being streamed, or a tool that has not returned
  * @param failed the tool returned an error, or the turn ended in one
  * @param chips  what this turn touched, shown under it ({@code map · +3 nodes})
+ * @param ask    for a tool: whether it waits on the human, and what they said
  */
-public record Turn(long id, Who who, String title, String text, boolean live, boolean failed, List<String> chips) {
+public record Turn(long id, Who who, String title, String text, boolean live, boolean failed, List<String> chips,
+                   Ask ask) {
 
     /** Who an entry is from. An enum with its label on it, so a view needs no switch to name one. */
     public enum Who {
@@ -39,39 +41,73 @@ public record Turn(long id, Who who, String title, String text, boolean live, bo
         }
     }
 
+    /**
+     * Whether a tool waits on the human: not at all, still, or how it was settled. Each carries the chip a view shows
+     * once it is settled, so a view needs no switch to name one.
+     */
+    public enum Ask {
+        NONE(""),
+        PENDING(""),
+        ALLOWED("allowed"),
+        DENIED("denied"),
+        /** Never answered: the turn was interrupted or the process ended while it waited. */
+        LAPSED("not answered");
+
+        private final String chip;
+
+        Ask(String chip) {
+            this.chip = chip;
+        }
+
+        /** What a settled ask says under its tool; empty for none, or one still waiting. */
+        public String chip() {
+            return chip;
+        }
+    }
+
     public Turn {
+        ask = ask == null ? Ask.NONE : ask;
         title = title == null ? "" : title;
         text = text == null ? "" : text;
         chips = List.copyOf(chips);
     }
 
     public static Turn human(long id, String text) {
-        return new Turn(id, Who.HUMAN, "", text, false, false, List.of());
+        return new Turn(id, Who.HUMAN, "", text, false, false, List.of(), Ask.NONE);
     }
 
     public static Turn agent(long id, String text, boolean live) {
-        return new Turn(id, Who.AGENT, "", text, live, false, List.of());
+        return new Turn(id, Who.AGENT, "", text, live, false, List.of(), Ask.NONE);
     }
 
     public static Turn tool(long id, String name, String detail) {
-        return new Turn(id, Who.TOOL, name, detail, true, false, List.of());
+        return new Turn(id, Who.TOOL, name, detail, true, false, List.of(), Ask.NONE);
     }
 
     public static Turn note(long id, String text, boolean failed) {
-        return new Turn(id, Who.NOTE, "", text, false, failed, List.of());
+        return new Turn(id, Who.NOTE, "", text, false, failed, List.of(), Ask.NONE);
     }
 
     public Turn withText(String value) {
-        return new Turn(id, who, title, value, live, failed, chips);
+        return new Turn(id, who, title, value, live, failed, chips, ask);
     }
 
     /** The turn has stopped growing; {@code error} marks a tool that returned one. */
     public Turn finished(boolean error) {
-        return new Turn(id, who, title, text, false, failed || error, chips);
+        return new Turn(id, who, title, text, false, failed || error, chips, ask);
     }
 
     public Turn withChips(List<String> value) {
-        return new Turn(id, who, title, text, live, failed, value);
+        return new Turn(id, who, title, text, live, failed, value, ask);
+    }
+
+    public Turn withAsk(Ask value) {
+        return new Turn(id, who, title, text, live, failed, chips, value);
+    }
+
+    /** Waiting on the human's say-so. */
+    public boolean asking() {
+        return ask == Ask.PENDING;
     }
 
     /** The heading a view shows: the speaker, and for a tool its name. */

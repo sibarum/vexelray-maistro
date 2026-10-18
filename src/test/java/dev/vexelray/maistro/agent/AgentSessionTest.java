@@ -350,6 +350,33 @@ class AgentSessionTest {
     }
 
     @Test
+    void permissionAnswersAreControlResponses() throws Exception {
+        FakeProcess fake = new FakeProcess();
+        AgentSession s = AgentSession.start(AgentSession.Options.of(EXE), new AgentListener() {
+        }, launcherOf(fake));
+        assertTrue(s.allow("r1", Json.parse("{\"command\":\"ls\"}")));
+        assertTrue(s.deny("r2", "no"));
+        assertTrue(s.refuse("r3", "not handled"));
+        assertEquals(List.of(
+                "{\"type\":\"control_response\",\"response\":{\"subtype\":\"success\",\"request_id\":\"r1\","
+                        + "\"response\":{\"behavior\":\"allow\",\"updatedInput\":{\"command\":\"ls\"}}}}",
+                "{\"type\":\"control_response\",\"response\":{\"subtype\":\"success\",\"request_id\":\"r2\","
+                        + "\"response\":{\"behavior\":\"deny\",\"message\":\"no\"}}}",
+                "{\"type\":\"control_response\",\"response\":{\"subtype\":\"error\",\"request_id\":\"r3\","
+                        + "\"error\":\"not handled\"}}"),
+                fake.received);
+        s.close();
+    }
+
+    @Test
+    void permissionPromptsAreAskedForOnTheCommandLine() {
+        List<String> c = AgentSession.Options.of(EXE).withPermissionPrompts().command();
+        int at = c.indexOf("--permission-prompt-tool");
+        assertTrue(at > 0, c.toString());
+        assertEquals("stdio", c.get(at + 1));
+    }
+
+    @Test
     void closeKillsAProcessThatIgnoresItsInput() throws Exception {
         FakeProcess fake = new FakeProcess();
         Collector c = new Collector();

@@ -14,7 +14,9 @@ import java.util.List;
  * agent was told. It stays up until its input closes, as the real one does.
  *
  * <p>Arguments: the recorded turn ({@code .jsonl}), and the file to append what it is sent to. The turn's
- * {@code system/init} line is printed once, at start, as the real CLI prints it.
+ * {@code system/init} line is printed once, at start, as the real CLI prints it. A line {@code #await <type>} in the
+ * turn is not printed: it waits for a line of that type on the input, which is how a turn asks permission and waits
+ * for Maistro's {@code control_response} before it goes on.
  */
 public class FakeClaude {
 
@@ -27,9 +29,38 @@ public class FakeClaude {
         turn.stream().filter(FakeClaude::isInit).forEach(out::println);
         BufferedReader in = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
         for (String line = in.readLine(); line != null; line = in.readLine()) {
-            Files.writeString(heard, line + "\n", StandardCharsets.UTF_8, StandardOpenOption.APPEND);
-            turn.stream().filter(l -> !isInit(l) && !l.isBlank()).forEach(out::println);
+            record(heard, line);
+            for (String l : turn) {
+                if (l.startsWith(AWAIT)) {
+                    if (!awaitLine(in, heard, l.substring(AWAIT.length()).strip())) {
+                        return;
+                    }
+                } else if (!isInit(l) && !l.isBlank()) {
+                    out.println(l);
+                }
+            }
         }
+    }
+
+    /**
+     * A line of the turn that is not printed but waits: {@code #await control_response} reads (and records) input
+     * until a line of that type arrives, as the real CLI waits for the answer to a permission prompt.
+     */
+    private static final String AWAIT = "#await ";
+
+    /** Read until a line of {@code type}; false if the input closed first. */
+    private static boolean awaitLine(BufferedReader in, Path heard, String type) throws IOException {
+        for (String line = in.readLine(); line != null; line = in.readLine()) {
+            record(heard, line);
+            if (line.contains("\"type\":\"" + type + "\"")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static void record(Path heard, String line) throws IOException {
+        Files.writeString(heard, line + "\n", StandardCharsets.UTF_8, StandardOpenOption.APPEND);
     }
 
     private static boolean isInit(String line) {

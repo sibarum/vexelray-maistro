@@ -83,3 +83,16 @@ For Maistro this was the logged-in CLI. The first look at the map needed a stand
 same. A template convention could make it one of the first things written: a `replay` folder and a documented
 `--<backend>=<stand-in>` switch.
 
+
+## FN-6 · `Node.children(...)` appends, and reads like a setter 🔬
+
+`row.children(a, b)` posts an `Insert` per child, at the end. It does not replace the row's children. Every
+builder-style API this resembles replaces, and so did both places Maistro rebuilt a row with it: a turn's chips
+(`ConversationPane`) and the map's click boxes after a carve (`MapPane`). Both bugs were silent until two rebuilds
+happened before a frame. A tool turn then showed `allowed allowed`. Fixed here by calling `remove()` on each old
+child first.
+
+What it costs: a bug that every application writing "redraw this row from the model" hits, and that looks right in
+every test that only builds once. What the framework could do: rename it `append(Node...)` and add a
+`replaceChildren(Node...)` that does what the name says. At the least, say "appends" in its javadoc, which is
+empty.

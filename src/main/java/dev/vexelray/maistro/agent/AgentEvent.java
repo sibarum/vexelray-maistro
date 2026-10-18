@@ -67,6 +67,9 @@ public interface AgentEvent {
         default void onControlRequest(ControlRequest e) {
         }
 
+        default void onPermissionRequest(PermissionRequest e) {
+        }
+
         default void onUnknown(Unknown e) {
         }
 
@@ -228,13 +231,32 @@ public interface AgentEvent {
     }
 
     /**
-     * A {@code control_request} from the CLI to us (for instance {@code can_use_tool}, only sent when it was started
-     * with {@code --permission-prompt-tool stdio}). {@link AgentSession} does not answer these yet.
+     * A {@code control_request} from the CLI to us that has no record of its own: anything but
+     * {@link PermissionRequest}. Every one wants an answer; {@link AgentSession#refuse} is the one for a request
+     * this code does not handle.
      */
     record ControlRequest(String requestId, String subtype, JsonValue request) implements AgentEvent {
         @Override
         public void to(Sink l) {
             l.onControlRequest(this);
+        }
+    }
+
+    /**
+     * {@code control_request} / {@code can_use_tool}: the agent wants to run a tool that needs the human's say-so.
+     * Sent only when the CLI was started with {@code --permission-prompt-tool stdio}
+     * ({@link AgentSession.Options#withPermissionPrompts}), and it waits, with the tool not run, until
+     * {@link AgentSession#allow} or {@link AgentSession#deny} answers {@code requestId}.
+     *
+     * @param toolUseId the {@code tool_use} block this is about, as {@link ToolUse#id}; {@code ""} if not given
+     * @param request   the whole request, for the fields this record does not lift out ({@code permission_suggestions},
+     *                  {@code blocked_path}, ...)
+     */
+    record PermissionRequest(String requestId, String toolName, JsonValue input, String toolUseId, JsonValue request)
+            implements AgentEvent {
+        @Override
+        public void to(Sink l) {
+            l.onPermissionRequest(this);
         }
     }
 

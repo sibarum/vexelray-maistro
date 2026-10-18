@@ -103,6 +103,48 @@ class UiTest {
     }
 
     @Test
+    void aPermissionPromptWaitsOnItsToolTurnUntilTheTurnEnds() {
+        Conductor c = wiring.conductor();
+        c.onToolUse(new AgentEvent.ToolUse("m1", "tu1", "Bash", Json.parse("{\"command\":\"rm -rf build\"}"), ""));
+        long tool = wiring.model().doc().transcript().last().id();
+        c.onPermissionRequest(new AgentEvent.PermissionRequest("r1", "Bash",
+                Json.parse("{\"command\":\"rm -rf build\"}"), "tu1", Json.parse("{}")));
+        Doc doc = wiring.model().doc();
+        assertEquals(1, doc.transcript().size(), "the request lands on the tool's own turn");
+        assertEquals(tool, doc.transcript().asking().getFirst().id());
+        assertEquals("waiting for you: Bash", doc.activity());
+        assertTrue(doc.busy());
+
+        c.onResult(result(false, 0, 1));
+        assertEquals(Turn.Ask.LAPSED, wiring.model().doc().transcript().turns().getFirst().ask());
+        c.answer(tool, true);
+        assertEquals(Turn.Ask.LAPSED, wiring.model().doc().transcript().turns().getFirst().ask(),
+                "an answer after the turn ended changes nothing");
+    }
+
+    @Test
+    void aPermissionPromptForAnUnseenToolMakesItsOwnTurn() {
+        Conductor c = wiring.conductor();
+        c.onPermissionRequest(new AgentEvent.PermissionRequest("r1", "Write",
+                Json.parse("{\"file_path\":\"a.txt\"}"), "", Json.parse("{}")));
+        Turn turn = wiring.model().doc().transcript().last();
+        assertEquals("TOOL · Write", turn.heading());
+        assertEquals("a.txt", turn.text());
+        assertTrue(turn.asking());
+    }
+
+    @Test
+    void anAskWithNoProcessToAnswerIsNoted() {
+        Conductor c = wiring.conductor();
+        c.onPermissionRequest(new AgentEvent.PermissionRequest("r1", "Bash", Json.parse("{}"), "", Json.parse("{}")));
+        long tool = wiring.model().doc().transcript().last().id();
+        c.answer(tool, false);
+        Turn note = wiring.model().doc().transcript().last();
+        assertEquals(Turn.Who.NOTE, note.who());
+        assertTrue(note.failed());
+    }
+
+    @Test
     void aFailedTurnSaysSo() {
         Conductor c = wiring.conductor();
         c.onResult(result(false, 0, 0));

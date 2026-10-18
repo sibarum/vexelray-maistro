@@ -192,17 +192,13 @@ final class MapPane {
 
     /** Drop the box of every node the graph no longer has (a carve), and its landmark with it. */
     private void forgetTargetsNotIn(MapGraph graph) {
-        boolean dropped = false;
         for (Iterator<Map.Entry<String, Target>> it = targets.entrySet().iterator(); it.hasNext(); ) {
             Map.Entry<String, Target> e = it.next();
             if (!graph.contains(e.getKey())) {
                 gui.clearLandmark(Landmarks.mapNode(e.getKey()));
+                e.getValue().box().remove();
                 it.remove();
-                dropped = true;
             }
-        }
-        if (dropped) {
-            layer.children(targets.values().stream().map(Target::box).toArray(Node[]::new));
         }
     }
 

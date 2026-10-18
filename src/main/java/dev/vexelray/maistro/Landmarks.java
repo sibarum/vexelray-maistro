@@ -31,6 +31,23 @@ final class Landmarks {
     /** The ✕ that lets that node go. */
     static final String COMPOSER_FROM_CLEAR = "composer.from.clear";
 
+    /**
+     * Allow and Deny under the oldest tool turn waiting on the human; unbound while none waits. A script that does
+     * not care which turn asked: {@code await status.agent waiting}, then {@code click ask.allow}.
+     */
+    static final String ASK_ALLOW = "ask.allow";
+    static final String ASK_DENY = "ask.deny";
+
+    /** Allow under the tool turn {@code turnId}, whether or not it is the oldest waiting. */
+    static String askAllow(long turnId) {
+        return "ask." + turnId + ".allow";
+    }
+
+    /** Deny under the tool turn {@code turnId}. */
+    static String askDeny(long turnId) {
+        return "ask." + turnId + ".deny";
+    }
+
     /** The mind map, the main stage. */
     static final String MAP = "map";
 

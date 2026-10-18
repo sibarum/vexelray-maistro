@@ -12,8 +12,10 @@ longer list this is drawn from.
 
 - [ ] See a real reply drawn on the map. The pipeline is tested headless, and seen end to end only as far as the
       CLI's "Not logged in": the desktop app's bundled `claude.exe` needs its own `/login`.
-- [ ] Permissions. Claude Code runs with `--permission-mode default` and no prompt tool, so anything that needs
-      approval is denied. Inline approve/deny in the transcript, over `--permission-prompt-tool` (guide, gap 3).
+- [ ] Record a real `can_use_tool` request from a logged-in run into `src/test/resources/agent/` and test the
+      parser on it. Its shape is the Agent SDK's documented one and has not been seen from this CLI yet.
+- [ ] Permissions, the rest: "always allow" from `permission_suggestions` (answered as `updatedPermissions`),
+      per-app trust (guide, gap 3), and a reason typed with a Deny.
 - [ ] True forks: a turn from a node in a fresh Claude Code session given only its neighbourhood, shown as a
       branch, merged back as new edges (guide, *Replies built to be forked*). Today a node only narrows where the
       one session looks (`Conductor.fromNode`).

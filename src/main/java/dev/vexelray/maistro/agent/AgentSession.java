@@ -108,6 +108,16 @@ public final class AgentSession implements AutoCloseable {
                     extraArgs, environment, scrubHostVariables);
         }
 
+        /**
+         * Ask over stdout before a tool that needs approval runs ({@code --permission-prompt-tool stdio}), as
+         * {@link AgentEvent.PermissionRequest}s. Without it, such a tool is refused without anyone being asked.
+         */
+        public Options withPermissionPrompts() {
+            List<String> args = new ArrayList<>(extraArgs);
+            args.addAll(List.of("--permission-prompt-tool", "stdio"));
+            return withExtraArgs(args);
+        }
+
         public Options withExtraArgs(List<String> args) {
             return new Options(executable, workingDirectory, model, permissionMode, appendSystemPrompt,
                     resumeSessionId, args, environment, scrubHostVariables);
@@ -235,6 +245,48 @@ public final class AgentSession implements AutoCloseable {
                 .put("request", JsonValue.Obj.builder().put("subtype", "interrupt").build())
                 .build();
         return writeLine(req) ? id : "";
+    }
+
+    /**
+     * Let the tool of an {@link AgentEvent.PermissionRequest} run, with {@code input} as it was asked for. False if
+     * nothing could be written.
+     */
+    public boolean allow(String requestId, JsonValue input) {
+        return answer(requestId, JsonValue.Obj.builder()
+                .put("behavior", "allow")
+                .put("updatedInput", input.isObject() ? input : JsonValue.Obj.EMPTY)
+                .build());
+    }
+
+    /** Refuse the tool of an {@link AgentEvent.PermissionRequest}; the agent is told {@code message}. */
+    public boolean deny(String requestId, String message) {
+        return answer(requestId, JsonValue.Obj.builder()
+                .put("behavior", "deny")
+                .put("message", message)
+                .build());
+    }
+
+    /** Answer a {@link AgentEvent.ControlRequest} this code does not handle with an error, rather than silence. */
+    public boolean refuse(String requestId, String error) {
+        return writeLine(JsonValue.Obj.builder()
+                .put("type", "control_response")
+                .put("response", JsonValue.Obj.builder()
+                        .put("subtype", "error")
+                        .put("request_id", requestId)
+                        .put("error", error)
+                        .build())
+                .build());
+    }
+
+    private boolean answer(String requestId, JsonValue response) {
+        return writeLine(JsonValue.Obj.builder()
+                .put("type", "control_response")
+                .put("response", JsonValue.Obj.builder()
+                        .put("subtype", "success")
+                        .put("request_id", requestId)
+                        .put("response", response)
+                        .build())
+                .build());
     }
 
     /** Writes one line of stream-json input as is. False if the session is closed or the write failed. */
