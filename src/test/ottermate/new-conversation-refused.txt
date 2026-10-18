@@ -1,0 +1,10 @@
+await composer
+click composer
+type clean the build
+key ENTER
+await status.agent waiting for you: Bash
+key CTRL+N
+await status.message Interrupt it (Escape)
+settle
+find clean the build
+shot target/new-conversation-refused.png

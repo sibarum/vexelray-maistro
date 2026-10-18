@@ -145,6 +145,33 @@ class UiTest {
     }
 
     @Test
+    void aNewConversationStartsEmptyAndKeepsThePanes() {
+        Conductor c = wiring.conductor();
+        c.onAssistantText(new AgentEvent.AssistantText("m1", "Hi.\n\n```maistro-map\nnode a \"A\"\n```", ""));
+        c.onResult(result(true, 0.5, 1));
+        wiring.model().toggle(Doc.Pane.CONTEXT);
+        String before = wiring.model().doc().meta().id();
+
+        assertTrue(c.restart());
+        Doc doc = wiring.model().doc();
+        assertEquals(0, doc.transcript().size());
+        assertTrue(doc.mind().graph().isEmpty());
+        assertEquals(0, doc.agent().costUsd());
+        assertFalse(doc.panes().context(), "the panes stay as they were");
+        assertFalse(before.equals(doc.meta().id()), "it is a different conversation");
+        assertEquals("", doc.meta().title());
+    }
+
+    @Test
+    void aNewConversationIsRefusedMidTurn() {
+        Conductor c = wiring.conductor();
+        c.onTextDelta(new AgentEvent.TextDelta(0, "half a rep", ""));
+        assertFalse(c.restart());
+        assertEquals(1, wiring.model().doc().transcript().size(), "nothing was cut off");
+        assertTrue(wiring.model().doc().status().contains("Escape"));
+    }
+
+    @Test
     void aFailedTurnSaysSo() {
         Conductor c = wiring.conductor();
         c.onResult(result(false, 0, 0));

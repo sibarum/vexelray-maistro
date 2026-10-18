@@ -1,0 +1,14 @@
+await composer
+click composer
+type hello
+key ENTER
+await context.focus KV cache
+await status.agent idle
+settle
+shot target/new-conversation-before.png
+key CTRL+N
+await status.message New conversation
+settle
+find Surprise drives
+find process ended
+shot target/new-conversation-after.png

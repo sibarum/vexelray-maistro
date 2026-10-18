@@ -1,11 +1,17 @@
 package dev.vexelray.maistro;
 
+import dev.vexelray.maistro.archive.Conversation;
 import dev.vexelray.maistro.chat.Transcript;
 import dev.vexelray.maistro.map.Layout;
 import dev.vexelray.maistro.map.MapGraph;
 
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.UnaryOperator;
 
 /**
@@ -27,9 +33,10 @@ import java.util.function.UnaryOperator;
  * @param agent      what the agent's process said about itself
  * @param mind       the mind map
  * @param status     the last thing the status line was told
+ * @param meta       which conversation this is: its id, title and when it started
  */
 record Doc(Transcript transcript, String activity, boolean busy, Panes panes, AgentInfo agent, Mind mind,
-           String status) {
+           String status, Meta meta) {
 
     /** Which of the three panes are on show. Each toggles on its own; the map takes whatever room is left. */
     record Panes(boolean conversation, boolean map, boolean context) {
@@ -168,31 +175,66 @@ record Doc(Transcript transcript, String activity, boolean busy, Panes panes, Ag
         }
     }
 
+    /**
+     * Which conversation this is: Maistro's own id for it (which names its file), what it is called, and when it
+     * started. The title is empty until the human first speaks.
+     */
+    record Meta(String id, String title, long started) {
+
+        private static final DateTimeFormatter STAMP =
+                DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss", Locale.ROOT).withZone(ZoneOffset.UTC);
+
+        /**
+         * A conversation starting at {@code now}: an id that sorts by time and is safe as a file name, with four
+         * random hex digits so two started in one second do not collide.
+         */
+        static Meta startingAt(long now) {
+            String id = STAMP.format(Instant.ofEpochMilli(now)) + "-"
+                    + String.format(Locale.ROOT, "%04x", ThreadLocalRandom.current().nextInt(0x10000));
+            return new Meta(id, "", now);
+        }
+
+        /** Called after {@code message}, if it has no title yet. */
+        Meta titled(String message) {
+            return title.isEmpty() ? new Meta(id, Conversation.titleFrom(message), started) : this;
+        }
+    }
+
     static Doc initial() {
-        return new Doc(Transcript.empty(), "not started", false, Panes.ALL, AgentInfo.NONE, Mind.EMPTY, "");
+        return new Doc(Transcript.empty(), "not started", false, Panes.ALL, AgentInfo.NONE, Mind.EMPTY, "",
+                Meta.startingAt(System.currentTimeMillis()));
+    }
+
+    /** A new conversation: nothing said, no map, no agent, and the panes as they are. */
+    Doc restarted() {
+        return initial().withPanes(panes).withStatus("New conversation");
+    }
+
+    Doc withMeta(UnaryOperator<Meta> change) {
+        return new Doc(transcript, activity, busy, panes, agent, mind, status, change.apply(meta));
     }
 
     Doc withTranscript(UnaryOperator<Transcript> change) {
-        return new Doc(change.apply(transcript), activity, busy, panes, agent, mind, status);
+        return new Doc(change.apply(transcript), activity, busy, panes, agent, mind, status, meta);
     }
 
     Doc withActivity(String value, boolean isBusy) {
-        return new Doc(transcript, value, isBusy, panes, agent, mind, status);
+        return new Doc(transcript, value, isBusy, panes, agent, mind, status, meta);
     }
 
     Doc withPanes(Panes value) {
-        return new Doc(transcript, activity, busy, value, agent, mind, status);
+        return new Doc(transcript, activity, busy, value, agent, mind, status, meta);
     }
 
     Doc withAgent(UnaryOperator<AgentInfo> change) {
-        return new Doc(transcript, activity, busy, panes, change.apply(agent), mind, status);
+        return new Doc(transcript, activity, busy, panes, change.apply(agent), mind, status, meta);
     }
 
     Doc withMind(UnaryOperator<Mind> change) {
-        return new Doc(transcript, activity, busy, panes, agent, change.apply(mind), status);
+        return new Doc(transcript, activity, busy, panes, agent, change.apply(mind), status, meta);
     }
 
     Doc withStatus(String value) {
-        return new Doc(transcript, activity, busy, panes, agent, mind, value);
+        return new Doc(transcript, activity, busy, panes, agent, mind, value, meta);
     }
 }

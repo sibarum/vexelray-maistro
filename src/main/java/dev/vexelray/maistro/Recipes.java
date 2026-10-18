@@ -6,6 +6,7 @@ import dev.vexelray.framework.api.Setting;
 import dev.vexelray.framework.shell.Appearance;
 import dev.vexelray.framework.shell.Shell;
 import dev.vexelray.gui.core.Gui;
+import dev.vexelray.gui.core.app.AppHome;
 import dev.vexelray.gui.core.app.Settings;
 import dev.vexelray.gui.core.layout.Length;
 import dev.vexelray.gui.krono.KronoGui;
@@ -103,6 +104,18 @@ final class Recipes {
     }
 
     /**
+     * Every conversation, kept on disk under the application's home ({@code ~/.vexelray-maistro/conversations}, or
+     * under {@code -Dvexelray-maistro.home}), written on the offload lane when a turn ends. Writes nothing until
+     * {@link #start} arms it.
+     */
+    @Provides
+    Archive archive(Gui gui, Model model) {
+        Archive archive = new Archive(AppHome.of(Maistro.APP).file("conversations"), gui.offload());
+        model.onChange(archive::changed);
+        return archive;
+    }
+
+    /**
      * Every command, and the chords for them.
      */
     @Provides
@@ -113,17 +126,18 @@ final class Recipes {
     }
 
     /**
-     * Bring back last time's panes, and put the keyboard in the composer.
+     * Bring back last time's panes, start keeping conversations, and put the keyboard in the composer.
      *
-     * <p>Takes the {@code Shell} to be last: restoring writes settings, which a tree built headless for a test must
-     * not, and the {@code Shell} is the framework's last-phase value.
+     * <p>Takes the {@code Shell} to be last: restoring writes settings and the archive writes conversations, which a
+     * tree built headless for a test must not, and the {@code Shell} is the framework's last-phase value.
      *
      * <p>A provider has to return something that is neither {@code void} nor a record, hence {@link Started}, which
      * marks that this ran and is otherwise empty.
      */
     @Provides
-    Started start(Shell shell, Actions actions, Session session, Ui ui) {
+    Started start(Shell shell, Actions actions, Session session, Ui ui, Archive archive) {
         session.restore();
+        archive.arm();
         ui.conversation().focusComposer();
         return new Started();
     }

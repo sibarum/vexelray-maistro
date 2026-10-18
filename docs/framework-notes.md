@@ -96,3 +96,17 @@ What it costs: a bug that every application writing "redraw this row from the mo
 every test that only builds once. What the framework could do: rename it `append(Node...)` and add a
 `replaceChildren(Node...)` that does what the name says. At the least, say "appends" in its javadoc, which is
 empty.
+
+## FN-7 · A script cannot close the application, so shutdown is never checked 🔬
+
+Maistro saves the conversation as it closes (`Archive.close()`), and there is no way to see that happen under
+`ottermate`. At the end of a script `ottermate` kills the process: the log stops at `connection 1 closed`, with no
+shutdown in it. The title bar's minimise, maximise and close controls are not in the automation tree (`tree` lists
+only the title and the two instrument icons), so there is nothing to `click`, and `key ALT+F4` arrives as a key and
+closes nothing. The save on close is unit-tested, and the framework's promise to close `AutoCloseable` parts is
+taken on trust.
+
+What it costs: every application's shutdown path (saving, flushing, closing a child process) goes untested end to
+end. What the framework could do: put the window controls in the tree with landmarks (`window.close`), or give
+`ottermate` a `close` verb that asks the window to close as a person would, then waits for the process to exit and
+reports its exit code.

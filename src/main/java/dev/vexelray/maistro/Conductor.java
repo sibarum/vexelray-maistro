@@ -70,6 +70,8 @@ final class Conductor implements AgentListener, AutoCloseable {
 
     private AgentSession session;
     private String lastSessionId = "";
+    /** Which conversation's process is current; events from an older one are dropped ({@link #restart}). */
+    private int generation;
 
     Conductor(Model model, Launch launch) {
         this.model = model;
@@ -95,6 +97,7 @@ final class Conductor implements AgentListener, AutoCloseable {
             List<String> chips = from.map(n -> List.of("from · " + n.shownLabel())).orElse(List.of());
             return d.withTranscript(t -> t.append(id -> Turn.human(id, text).withChips(chips)))
                     .withMind(Doc.Mind::spoke)
+                    .withMeta(m -> m.titled(text))
                     .withActivity("thinking", true);
         });
         AgentSession s = sessionOrStart();
@@ -138,7 +141,7 @@ final class Conductor implements AgentListener, AutoCloseable {
                 .withWorkingDirectory(launch.cwd().isBlank() ? null : Path.of(launch.cwd()))
                 .withResume(blankToNull(lastSessionId));
         try {
-            session = AgentSession.start(options, this);
+            session = AgentSession.start(options, new Current(generation));
             LOG.info("started Claude Code from {} ({})", exe, found.reason());
             return session;
         } catch (IOException e) {
@@ -151,6 +154,59 @@ final class Conductor implements AgentListener, AutoCloseable {
     private synchronized void remember(String sessionId) {
         if (!sessionId.isEmpty()) {
             lastSessionId = sessionId;
+        }
+    }
+
+    /**
+     * Start a new conversation. On a worker. Refused, with a word on the status line, while a turn is running:
+     * nothing the agent is doing is cut off without the human saying so (Escape). Otherwise the process ends, its
+     * session is forgotten so the next message starts a fresh one, and the session is reset with the panes kept.
+     * The conversation that ends was saved when its last turn did ({@code Archive}).
+     *
+     * @return whether a new conversation started
+     */
+    boolean restart() {
+        if (model.doc().busy()) {
+            model.say("The agent is working. Interrupt it (Escape) or wait for the reply, then start a new one.");
+            return false;
+        }
+        AgentSession s;
+        synchronized (this) {
+            s = session;
+            session = null;
+            lastSessionId = "";
+            generation++;
+        }
+        tools.clear();
+        asks.clear();
+        if (s != null) {
+            s.close();
+        }
+        model.change(Doc::restarted);
+        return true;
+    }
+
+    private synchronized boolean isCurrent(int g) {
+        return g == generation;
+    }
+
+    /**
+     * Hands a session's events to this conductor while that session is the current conversation's. The process a
+     * new conversation closes still reports its end, and that must not land in the conversation that replaced it.
+     */
+    private final class Current implements AgentListener {
+
+        private final int generation;
+
+        Current(int generation) {
+            this.generation = generation;
+        }
+
+        @Override
+        public void onEvent(AgentEvent event) {
+            if (isCurrent(generation)) {
+                event.to(Conductor.this);
+            }
         }
     }
 

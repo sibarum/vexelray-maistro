@@ -38,6 +38,16 @@ final class Actions {
         gui.shortcut(Key.DIGIT_3, () -> model.toggle(Doc.Pane.CONTEXT), Modifier.CONTROL);
         gui.shortcut(Key.L, ui.conversation()::focusComposer, Modifier.CONTROL);
         gui.shortcut(Key.ESCAPE, this::interrupt);
+        gui.shortcut(Key.N, this::newConversation, Modifier.CONTROL);
+    }
+
+    /** Start a new conversation, unless the agent is in the middle of a turn; then say why not. */
+    void newConversation() {
+        if (conductor.restart()) {
+            ui.conversation().focusComposer();
+        } else {
+            ui.alert();
+        }
     }
 
     /** Stop the agent's turn, if it has one. */

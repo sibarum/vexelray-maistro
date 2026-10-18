@@ -185,6 +185,18 @@ final class ConversationPane {
      */
     synchronized void show(Transcript t) {
         empty.visible(t.size() == 0);
+        // A new conversation drops every turn, and its ids start again: views of turns that are gone go first.
+        java.util.Set<Long> present = new java.util.HashSet<>();
+        for (Turn turn : t.turns()) {
+            present.add(turn.id());
+        }
+        for (java.util.Iterator<Map.Entry<Long, TurnView>> it = views.entrySet().iterator(); it.hasNext(); ) {
+            Map.Entry<Long, TurnView> e = it.next();
+            if (!present.contains(e.getKey())) {
+                e.getValue().forget();
+                it.remove();
+            }
+        }
         boolean grew = false;
         for (Turn turn : t.turns()) {
             TurnView view = views.get(turn.id());
@@ -242,6 +254,13 @@ final class ConversationPane {
             root = gui.column().width(Length.FILL).gap(Type.TIGHT).alignItems(AlignItems.STRETCH)
                     .children(heading, body, ask, chips);
             update(turn);
+        }
+
+        /** Take this turn out of the window, with the landmarks of its buttons. */
+        void forget() {
+            gui.clearLandmark(Landmarks.askAllow(shown.id()));
+            gui.clearLandmark(Landmarks.askDeny(shown.id()));
+            root.remove();
         }
 
         void update(Turn turn) {

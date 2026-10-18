@@ -76,6 +76,7 @@ groups the button with other Java programs, and pinning it pins Java. The native
 | Enter (in the composer) | send |
 | Escape | interrupt the agent's turn |
 | Ctrl+L | put the keyboard in the composer |
+| Ctrl+N | a new conversation (refused while the agent is mid-turn: Escape first) |
 | Ctrl+1 / Ctrl+2 / Ctrl+3 | show or hide the conversation, the mind map, the context stream |
 | Ctrl+= / Ctrl+- / Ctrl+0 | zoom |
 
@@ -104,6 +105,7 @@ Read these in this order.
 | `Recipes.java` | **what this application builds.** One `@Provides` method per part; `MaistroAppWiring`, which builds them in order, is generated from it while the project compiles. A part's phase is the latest phase of anything it takes, so there is none to declare. New parts go here. |
 | `Doc.java`, `Model.java` | the session: the transcript, what the agent is doing, which panes are up, the agent's own readouts and the mind map, as one immutable value changed only by functions of the current value, committed through atchung's `State`. |
 | `Conductor.java` | the agent's side: one Claude Code process, and each of its events turned into one commit to the model. |
+| `Archive.java` | every conversation kept, one JSON file each under `~/.vexelray-maistro/conversations/`, written on the offload lane when a turn ends and once more as the application closes. |
 | `Ui.java` and its panes | the window: `PaneRail`, `ConversationPane`, `MapPane`, `ContextPane`. Hold no state; `show(Doc)` writes everything derived from the session. |
 | `Actions.java` | every command and its chord. |
 | `Session.java` | what comes back next time (the panes), in the framework's one settings store. |
@@ -111,6 +113,7 @@ Read these in this order.
 | `agent/` | **no `Gui`:** finding the CLI, its stream-json protocol as typed events, a strict JSON reader, the process. |
 | `map/` | **no `Gui`:** the concept graph as a value, the `maistro-map` block format and its parser, a deterministic layout that keeps old nodes still. |
 | `chat/` | **no `Gui`:** the transcript and its turns. |
+| `archive/` | **no `Gui`:** a conversation as it is kept, and its JSON, written field by field. |
 | `text/Markdown.java` | **no `Gui`:** Markdown as spans, for the agent's replies. |
 
 `Maistro.java` is the entry point and the constants, and nothing else. The application edge — input, the
@@ -236,6 +239,18 @@ once:
 ```
 ottermate --script src/test/ottermate/permission.txt --launch mvn.cmd compile exec:exec -Dautomation=0 "-Dapp.args=--claude=src/test/ottermate/fake-claude-permission.cmd"
 ```
+
+A run under `ottermate` that ends a turn saves the conversation into your real `~/.vexelray-maistro`. To keep a check
+out of it, give the run a home of its own. That moves the settings and the log there too
+(`target/ottermate-home/logs/`), so read the log there. `new-conversation.txt` (with `fake-claude.cmd`) and
+`new-conversation-refused.txt` (with `fake-claude-permission.cmd`) check Ctrl+N that way:
+
+```
+ottermate --script src/test/ottermate/new-conversation.txt --launch mvn.cmd compile exec:exec -Dautomation=0 "-Dapp.jvmArgs=-Dvexelray-maistro.home=C:/path/to/vexelray-maistro/target/ottermate-home" "-Dapp.args=--claude=src/test/ottermate/fake-claude.cmd"
+```
+
+`ottermate` kills the application when a script ends, and a script cannot close its window, so nothing that runs
+at shutdown is seen in these checks.
 
 ## Logging
 

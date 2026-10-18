@@ -10,8 +10,7 @@ import java.util.Objects;
  * <p>Kept in the framework's one {@link Settings}, the same store that remembers where the window was, under keys of
  * this application's own. Written when that changes, read once, after the window exists.
  *
- * <p>The conversation itself is not remembered here. Claude Code keeps its own sessions on disk, and resuming one
- * is a later slice (docs/TODO.md).
+ * <p>The conversation itself is not remembered here: {@link Archive} keeps each one in a file of its own.
  */
 final class Session {
 
