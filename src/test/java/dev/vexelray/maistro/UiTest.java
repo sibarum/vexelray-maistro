@@ -60,17 +60,17 @@ class UiTest {
     @Test
     void aStreamedReplyBecomesOneAgentTurn() {
         Conductor c = wiring.conductor();
-        c.onSessionInit(new AgentEvent.SessionInit("abc-123", "claude-opus-5-5", "C:/work", "default", "2.1",
+        c.main().onSessionInit(new AgentEvent.SessionInit("abc-123", "claude-opus-5-5", "C:/work", "default", "2.1",
                 List.of("Read"), Json.parse("{}")));
-        c.onTextDelta(new AgentEvent.TextDelta(0, "Hel", ""));
-        c.onTextDelta(new AgentEvent.TextDelta(0, "lo", ""));
+        c.main().onTextDelta(new AgentEvent.TextDelta(0, "Hel", ""));
+        c.main().onTextDelta(new AgentEvent.TextDelta(0, "lo", ""));
         Doc mid = wiring.model().doc();
         assertEquals("Hello", mid.transcript().last().text());
         assertTrue(mid.transcript().last().live());
         assertTrue(mid.busy());
 
-        c.onAssistantText(new AgentEvent.AssistantText("m1", "Hello.", ""));
-        c.onResult(result(true, 0.0123, 1));
+        c.main().onAssistantText(new AgentEvent.AssistantText("m1", "Hello.", ""));
+        c.main().onResult(result(true, 0.0123, 1));
         Doc end = wiring.model().doc();
         assertEquals(1, end.transcript().size());
         Turn reply = end.transcript().last();
@@ -86,8 +86,8 @@ class UiTest {
     @Test
     void aToolCallIsATurnOfItsOwnThatEndsWithItsResult() {
         Conductor c = wiring.conductor();
-        c.onTextDelta(new AgentEvent.TextDelta(0, "Looking.", ""));
-        c.onToolUse(new AgentEvent.ToolUse("m1", "tu1", "Bash", Json.parse("{\"command\":\"ls -la\"}"), ""));
+        c.main().onTextDelta(new AgentEvent.TextDelta(0, "Looking.", ""));
+        c.main().onToolUse(new AgentEvent.ToolUse("m1", "tu1", "Bash", Json.parse("{\"command\":\"ls -la\"}"), ""));
         Turn tool = wiring.model().doc().transcript().last();
         assertEquals("TOOL · Bash", tool.heading());
         assertEquals("ls -la", tool.text());
@@ -95,7 +95,7 @@ class UiTest {
         assertEquals("running Bash", wiring.model().doc().activity());
         assertFalse(wiring.model().doc().transcript().turns().getFirst().live(), "the reply before it stopped");
 
-        c.onToolResult(new AgentEvent.ToolResult("tu1", "boom\nmore", Json.parse("null"), true, ""));
+        c.main().onToolResult(new AgentEvent.ToolResult("tu1", "boom\nmore", Json.parse("null"), true, ""));
         Turn done = wiring.model().doc().transcript().last();
         assertFalse(done.live());
         assertTrue(done.failed());
@@ -105,9 +105,9 @@ class UiTest {
     @Test
     void aPermissionPromptWaitsOnItsToolTurnUntilTheTurnEnds() {
         Conductor c = wiring.conductor();
-        c.onToolUse(new AgentEvent.ToolUse("m1", "tu1", "Bash", Json.parse("{\"command\":\"rm -rf build\"}"), ""));
+        c.main().onToolUse(new AgentEvent.ToolUse("m1", "tu1", "Bash", Json.parse("{\"command\":\"rm -rf build\"}"), ""));
         long tool = wiring.model().doc().transcript().last().id();
-        c.onPermissionRequest(new AgentEvent.PermissionRequest("r1", "Bash",
+        c.main().onPermissionRequest(new AgentEvent.PermissionRequest("r1", "Bash",
                 Json.parse("{\"command\":\"rm -rf build\"}"), "tu1", Json.parse("{}")));
         Doc doc = wiring.model().doc();
         assertEquals(1, doc.transcript().size(), "the request lands on the tool's own turn");
@@ -115,7 +115,7 @@ class UiTest {
         assertEquals("waiting for you: Bash", doc.activity());
         assertTrue(doc.busy());
 
-        c.onResult(result(false, 0, 1));
+        c.main().onResult(result(false, 0, 1));
         assertEquals(Turn.Ask.LAPSED, wiring.model().doc().transcript().turns().getFirst().ask());
         c.answer(tool, true);
         assertEquals(Turn.Ask.LAPSED, wiring.model().doc().transcript().turns().getFirst().ask(),
@@ -125,7 +125,7 @@ class UiTest {
     @Test
     void aPermissionPromptForAnUnseenToolMakesItsOwnTurn() {
         Conductor c = wiring.conductor();
-        c.onPermissionRequest(new AgentEvent.PermissionRequest("r1", "Write",
+        c.main().onPermissionRequest(new AgentEvent.PermissionRequest("r1", "Write",
                 Json.parse("{\"file_path\":\"a.txt\"}"), "", Json.parse("{}")));
         Turn turn = wiring.model().doc().transcript().last();
         assertEquals("TOOL · Write", turn.heading());
@@ -136,7 +136,7 @@ class UiTest {
     @Test
     void theClisOwnSuggestionsAreOfferedInWords() {
         Conductor c = wiring.conductor();
-        c.onPermissionRequest(new AgentEvent.PermissionRequest("r1", "Bash", Json.parse("{\"command\":\"ls\"}"), "",
+        c.main().onPermissionRequest(new AgentEvent.PermissionRequest("r1", "Bash", Json.parse("{\"command\":\"ls\"}"), "",
                 Json.parse("{\"permission_suggestions\":["
                         + "{\"type\":\"addRules\",\"behavior\":\"allow\",\"destination\":\"session\","
                         + "\"rules\":[{\"toolName\":\"Bash\",\"ruleContent\":\"ls\"}]},"
@@ -150,7 +150,7 @@ class UiTest {
         c.answerAlways(turn.id(), 5);
         assertTrue(wiring.model().doc().transcript().last().asking(), "an offer that is not there does nothing");
 
-        c.onResult(result(false, 0, 1));
+        c.main().onResult(result(false, 0, 1));
         Turn lapsed = wiring.model().doc().transcript().turns().stream()
                 .filter(t -> t.id() == turn.id()).findFirst().orElseThrow();
         assertEquals(Turn.Ask.LAPSED, lapsed.ask());
@@ -160,7 +160,7 @@ class UiTest {
     @Test
     void anAskWithNoProcessToAnswerIsNoted() {
         Conductor c = wiring.conductor();
-        c.onPermissionRequest(new AgentEvent.PermissionRequest("r1", "Bash", Json.parse("{}"), "", Json.parse("{}")));
+        c.main().onPermissionRequest(new AgentEvent.PermissionRequest("r1", "Bash", Json.parse("{}"), "", Json.parse("{}")));
         long tool = wiring.model().doc().transcript().last().id();
         c.answer(tool, false);
         Turn note = wiring.model().doc().transcript().last();
@@ -171,8 +171,8 @@ class UiTest {
     @Test
     void aNewConversationStartsEmptyAndKeepsThePanes() {
         Conductor c = wiring.conductor();
-        c.onAssistantText(new AgentEvent.AssistantText("m1", "Hi.\n\n```maistro-map\nnode a \"A\"\n```", ""));
-        c.onResult(result(true, 0.5, 1));
+        c.main().onAssistantText(new AgentEvent.AssistantText("m1", "Hi.\n\n```maistro-map\nnode a \"A\"\n```", ""));
+        c.main().onResult(result(true, 0.5, 1));
         wiring.model().toggle(Doc.Pane.CONTEXT);
         String before = wiring.model().doc().meta().id();
 
@@ -189,10 +189,10 @@ class UiTest {
     @Test
     void resumingBringsBackTheConversationAsSaved() {
         Conductor c = wiring.conductor();
-        c.onSessionInit(new AgentEvent.SessionInit("sess-old", "claude-opus-5-5", "C:/work", "default", "2.1",
+        c.main().onSessionInit(new AgentEvent.SessionInit("sess-old", "claude-opus-5-5", "C:/work", "default", "2.1",
                 List.of(), Json.parse("{}")));
-        c.onAssistantText(new AgentEvent.AssistantText("m1", "Hi.\n\n```maistro-map\nnode a \"A\"\nfocus a\n```", ""));
-        c.onResult(result(true, 0.5, 1));
+        c.main().onAssistantText(new AgentEvent.AssistantText("m1", "Hi.\n\n```maistro-map\nnode a \"A\"\nfocus a\n```", ""));
+        c.main().onResult(result(true, 0.5, 1));
         dev.vexelray.maistro.archive.Conversation saved = Archive.conversation(wiring.model().doc());
 
         assertTrue(c.restart());
@@ -215,10 +215,128 @@ class UiTest {
         assertFalse(Doc.Library.OPENING.loaded(List.of()).loading());
     }
 
+    /** a — b — c — d on the main map, with a focused. */
+    private Conductor chain() {
+        Conductor c = wiring.conductor();
+        c.main().onAssistantText(new AgentEvent.AssistantText("m1", """
+                ```maistro-map
+                node a "Alpha"
+                node b "Beta"
+                node c "Gamma"
+                node d "Delta"
+                edge a b
+                edge b c
+                edge c d
+                focus a
+                ```""", ""));
+        c.main().onResult(result(true, 0.25, 1));
+        return c;
+    }
+
+    @Test
+    void aBranchNeedsAFocusedNode() {
+        assertEquals("", wiring.conductor().branch());
+        assertTrue(wiring.model().doc().status().contains("Click a node"));
+        assertEquals(1, wiring.model().doc().strands().size());
+    }
+
+    @Test
+    void aBranchStartsFromTheFocusWithItsNeighbourhoodAndIsShown() {
+        Conductor c = chain();
+        assertEquals("b1", c.branch());
+        Doc doc = wiring.model().doc();
+        assertEquals("b1", doc.shown().id());
+        Doc.Strand b = doc.shown();
+        assertEquals("a", b.from());
+        assertEquals("Alpha", b.label());
+        assertEquals(List.of("a", "b"), b.graph().nodes().stream().map(Node::id).toList(), "depth 1");
+        assertEquals(0, doc.transcript().size(), "a branch starts with nothing said");
+        assertEquals(1, doc.main().transcript().size(), "the main strand is as it was");
+        assertEquals("b2", c.branch(), "a second branch from the same node is its own");
+
+        String prompt = Conductor.branchStart(b, "Why?");
+        assertTrue(prompt.contains("node b \"Beta\""), prompt);
+        assertFalse(prompt.contains("Gamma"), "two links away is not given: " + prompt);
+        assertTrue(prompt.endsWith("Why?"));
+    }
+
+    @Test
+    void aBranchsMapIsStagedNotMerged() {
+        Conductor c = chain();
+        c.branch();
+        c.lane("b1").onAssistantText(new AgentEvent.AssistantText("m2", """
+                Here.
+
+                ```maistro-map
+                node x "Xi"
+                edge a x
+                ```""", ""));
+        Doc doc = wiring.model().doc();
+        Doc.Strand b = doc.strand("b1").orElseThrow();
+        assertTrue(b.graph().contains("x"));
+        assertFalse(doc.mind().graph().contains("x"), "the main map does not have it until a merge");
+        assertEquals(List.of("staged · +1 node, +1 links"), b.transcript().last().chips());
+        assertEquals("Here.", b.transcript().last().text());
+
+        Doc.Mind drawn = doc.mind().staging(b.graph());
+        assertTrue(drawn.graph().contains("x"));
+        assertTrue(drawn.positions().containsKey("x"), "a staged node is placed for drawing");
+        assertEquals(doc.mind().positions().get("a"), drawn.positions().get("a"), "the map's nodes stay put");
+        assertEquals(doc.mind().graph(), doc.mind().staging(MapGraph.EMPTY).graph());
+    }
+
+    @Test
+    void abandoningABranchDropsItAndWhatItLaterSays() {
+        Conductor c = chain();
+        c.branch();
+        Conductor.Lane old = c.lane("b1");
+        assertTrue(c.abandon("b1"));
+        Doc doc = wiring.model().doc();
+        assertTrue(doc.strand("b1").isEmpty());
+        assertEquals(Doc.MAIN, doc.shown().id());
+        old.onTextDelta(new AgentEvent.TextDelta(0, "late", ""));
+        assertEquals(doc.strands(), wiring.model().doc().strands(), "a late word from it lands nowhere");
+        assertFalse(c.abandon(Doc.MAIN), "the main strand cannot be abandoned");
+    }
+
+    @Test
+    void aBusyBranchHoldsOffANewConversation() {
+        Conductor c = chain();
+        c.branch();
+        c.show(Doc.MAIN);
+        c.lane("b1").onTextDelta(new AgentEvent.TextDelta(0, "working", ""));
+        assertFalse(wiring.model().doc().busy(), "the strand on screen is idle");
+        assertFalse(c.restart(), "but a branch is not");
+    }
+
+    @Test
+    void branchesAreSavedAndComeBack() {
+        Conductor c = chain();
+        c.branch();
+        c.lane("b1").onSessionInit(new AgentEvent.SessionInit("sess-b1", "m", "C:/w", "default", "2.1", List.of(),
+                Json.parse("{}")));
+        c.lane("b1").onAssistantText(new AgentEvent.AssistantText("m2",
+                "Hm.\n\n```maistro-map\nnode x \"Xi\"\n```", ""));
+        c.lane("b1").onResult(result(true, 0.5, 1));
+        dev.vexelray.maistro.archive.Conversation saved = dev.vexelray.maistro.archive.ConversationCodec.decode(
+                dev.vexelray.maistro.archive.ConversationCodec.encode(Archive.conversation(wiring.model().doc())));
+        assertEquals(1, saved.branches().size());
+
+        assertTrue(c.restart());
+        assertTrue(c.resume(saved));
+        Doc doc = wiring.model().doc();
+        Doc.Strand b = doc.strand("b1").orElseThrow();
+        assertEquals("a", b.from());
+        assertEquals("sess-b1", b.agent().sessionId());
+        assertTrue(b.graph().contains("x"));
+        assertEquals(0.75, doc.totals().costUsd(), 1e-9);
+        assertEquals(Doc.MAIN, doc.shown().id());
+    }
+
     @Test
     void aNewConversationIsRefusedMidTurn() {
         Conductor c = wiring.conductor();
-        c.onTextDelta(new AgentEvent.TextDelta(0, "half a rep", ""));
+        c.main().onTextDelta(new AgentEvent.TextDelta(0, "half a rep", ""));
         assertFalse(c.restart());
         assertEquals(1, wiring.model().doc().transcript().size(), "nothing was cut off");
         assertTrue(wiring.model().doc().status().contains("Escape"));
@@ -227,7 +345,7 @@ class UiTest {
     @Test
     void aFailedTurnSaysSo() {
         Conductor c = wiring.conductor();
-        c.onResult(result(false, 0, 0));
+        c.main().onResult(result(false, 0, 0));
         Turn note = wiring.model().doc().transcript().last();
         assertEquals(Turn.Who.NOTE, note.who());
         assertTrue(note.failed());
@@ -236,8 +354,8 @@ class UiTest {
     @Test
     void theProcessEndingIsNotedAndLeavesNothingLive() {
         Conductor c = wiring.conductor();
-        c.onTextDelta(new AgentEvent.TextDelta(0, "half a rep", ""));
-        c.onProcessExit(new AgentEvent.ProcessExit(1));
+        c.main().onTextDelta(new AgentEvent.TextDelta(0, "half a rep", ""));
+        c.main().onProcessExit(new AgentEvent.ProcessExit(1));
         Doc doc = wiring.model().doc();
         assertTrue(doc.transcript().turns().stream().noneMatch(Turn::live));
         assertTrue(doc.transcript().last().failed());
@@ -257,8 +375,8 @@ class UiTest {
                 focus kv-cache
                 ```
                 """;
-        c.onTextDelta(new AgentEvent.TextDelta(0, reply, ""));
-        c.onAssistantText(new AgentEvent.AssistantText("m1", reply, ""));
+        c.main().onTextDelta(new AgentEvent.TextDelta(0, reply, ""));
+        c.main().onAssistantText(new AgentEvent.AssistantText("m1", reply, ""));
         Doc doc = wiring.model().doc();
         Turn turn = doc.transcript().last();
         assertEquals("The cache evicts by surprise.", turn.text());
@@ -277,7 +395,7 @@ class UiTest {
                 focus kv-cache
                 ```
                 """;
-        c.onAssistantText(new AgentEvent.AssistantText("m1", reply, ""));
+        c.main().onAssistantText(new AgentEvent.AssistantText("m1", reply, ""));
         Doc.Mind before = wiring.model().doc().mind();
         assertEquals("", before.anchor(), "the agent's focus is not the human's pick");
 

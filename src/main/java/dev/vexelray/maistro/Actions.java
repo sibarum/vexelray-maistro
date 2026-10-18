@@ -30,6 +30,8 @@ final class Actions {
         ui.conversation().onAnswer(conductor::answer);
         ui.conversation().onAlways(conductor::answerAlways);
         ui.conversation().onResume(this::resume);
+        ui.conversation().onStrands(conductor::show, conductor::abandon);
+        ui.context().onBranch(this::branch);
     }
 
     /**
@@ -45,6 +47,16 @@ final class Actions {
         gui.shortcut(Key.ESCAPE, this::escape);
         gui.shortcut(Key.N, this::newConversation, Modifier.CONTROL);
         gui.shortcut(Key.O, this::conversations, Modifier.CONTROL);
+        gui.shortcut(Key.B, this::branch, Modifier.CONTROL);
+    }
+
+    /** Start a branch from the focused node, and put the keyboard in the composer to say its first thing. */
+    void branch() {
+        if (conductor.branch().isEmpty()) {
+            ui.alert();
+        } else {
+            ui.conversation().focusComposer();
+        }
     }
 
     /** Start a new conversation, unless the agent is in the middle of a turn; then say why not. */
@@ -81,7 +93,7 @@ final class Actions {
             closeConversations();
             return;
         }
-        if (model.doc().busy()) {
+        if (model.doc().anyBusy()) {
             model.say("The agent is working. Interrupt it (Escape) or wait for the reply, then switch.");
             ui.alert();
             return;

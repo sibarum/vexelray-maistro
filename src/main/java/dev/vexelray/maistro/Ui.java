@@ -67,6 +67,10 @@ final class Ui {
         show(model.doc());
     }
 
+    ContextPane context() {
+        return context;
+    }
+
     ConversationPane conversation() {
         return conversation;
     }
@@ -83,12 +87,14 @@ final class Ui {
         conversation.node().visible(doc.panes().conversation());
         map.node().visible(doc.panes().map());
         context.node().visible(doc.panes().context());
+        conversation.showStrands(doc.strands(), doc.shown().id());
         conversation.show(doc.transcript());
         conversation.showLibrary(doc.library());
         conversation.showAnchor(doc.mind().anchorNode().map(dev.vexelray.maistro.map.Node::shownLabel).orElse(""));
         context.show(doc.agent());
+        context.showTotals(doc.totals(), doc.strands().size());
         context.show(doc.mind().graph());
-        map.show(doc.mind());
+        map.show(doc.mind(), doc.shown());
         status.text(Landmarks.STATUS_AGENT, "agent: " + doc.activity());
         status.text(Landmarks.STATUS_MESSAGE, doc.status());
         status.text(Landmarks.STATUS_MODEL, doc.agent().model());

@@ -17,9 +17,11 @@ longer list this is drawn from.
       SDK's documented ones and have not been seen from this CLI yet.
 - [ ] Permissions, the rest: per-app trust (guide, gap 3), a reason typed with a Deny, and a view of the standing
       rules already set up (they live in Claude Code's settings files).
-- [ ] True forks: a turn from a node in a fresh Claude Code session given only its neighbourhood, shown as a
-      branch, merged back as new edges (guide, *Replies built to be forked*). Today a node only narrows where the
-      one session looks (`Conductor.fromNode`).
+- [ ] Merge a branch back (slice 2 of the forks proposal): apply its staged map to the main one, renaming an id
+      that already means something else as `id~<branch>`, with a chip saying so; then tell the main agent, on its
+      next message, the branch's last reply and what it added.
+- [ ] Ctrl+B is checked with the map focused; whether the composer, when it has the keyboard, lets the chord
+      through is not.
 - [ ] Conversations, later: delete, rename, search, and Claude Code sessions started outside Maistro. A click on a
       row resumes through `onRowClicked`, which no script exercises yet (`resume.txt` uses Enter): rows are
       landmarked by id, which a script cannot know in advance.

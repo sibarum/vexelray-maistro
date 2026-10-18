@@ -56,6 +56,17 @@ final class Landmarks {
         return "ask." + turnId + ".deny";
     }
 
+    /** A strand's button over the transcript, by its id: {@code strand.main}, {@code strand.b1}. */
+    static String strand(String id) {
+        return "strand." + id;
+    }
+
+    /** Abandon, beside the strand buttons while a branch is on screen. */
+    static final String BRANCH_ABANDON = "branch.abandon";
+
+    /** "Branch from here", in the context stream's Focus section while a node is focused. */
+    static final String CONTEXT_BRANCH = "context.branch";
+
     /** The list of saved conversations (Ctrl+O), and one row of it by the conversation's id. */
     static final String CONVERSATIONS = "conversations";
 

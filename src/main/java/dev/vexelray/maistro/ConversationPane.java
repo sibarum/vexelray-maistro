@@ -5,6 +5,7 @@ import dev.vexelray.gui.core.Gui;
 import dev.vexelray.gui.core.Node;
 import dev.vexelray.gui.core.layout.LayoutEnums.AlignItems;
 import dev.vexelray.gui.core.layout.LayoutEnums.Direction;
+import dev.vexelray.gui.core.layout.LayoutEnums.Justify;
 import dev.vexelray.gui.core.layout.LayoutEnums.ScrollLock;
 import dev.vexelray.gui.core.layout.Length;
 import dev.vexelray.gui.core.style.Role;
@@ -60,6 +61,15 @@ final class ConversationPane {
 
     /** A saved conversation's row: its title over when it was saved. */
     private static final float LIBRARY_ROW_REM = 3.25f;
+
+    private Node strands;
+    private Node strandButtons;
+    private Node abandonRow;
+    private final Map<String, Node> strandNodes = new java.util.LinkedHashMap<>();
+    private List<String> strandSays = List.of();
+    private volatile String shownStrand = Doc.MAIN;
+    private volatile Consumer<String> showStrand = id -> { };
+    private volatile Consumer<String> abandon = id -> { };
 
     private ListView<Summary> list;
     private Node library;
@@ -156,8 +166,70 @@ final class ConversationPane {
                 .background(gui.theme().color(Role.PANEL))
                 .border(Length.dp(1), Look.RULE)
                 .alignItems(AlignItems.STRETCH)
-                .children(header(gui, "CONVERSATION"), transcript, library(), from, composerRow);
+                .children(header(gui, "CONVERSATION"), strandBar(), transcript, library(), from, composerRow);
         gui.landmark(Landmarks.CONVERSATION, root);
+    }
+
+    /**
+     * One button per strand over the transcript, the one on screen filled, a working one marked with a dot, and
+     * Abandon at the end while a branch is on screen. Hidden while there is only the main strand. Built once;
+     * {@link #showStrands} fills it.
+     */
+    private Node strandBar() {
+        strandButtons = gui.row().gap(Type.TIGHT).alignItems(AlignItems.CENTER);
+        Button abandonButton = new Button(gui, "Abandon branch").kind(Button.Kind.GHOST)
+                .onPress(() -> abandon.accept(shownStrand));
+        gui.landmark(Landmarks.BRANCH_ABANDON, abandonButton.node());
+        abandonRow = abandonButton.node();
+        strands = gui.row()
+                .width(Length.FILL)
+                .padding(Length.dp(0), Type.GUTTER)
+                .gap(Type.TIGHT)
+                .alignItems(AlignItems.CENTER)
+                .justify(Justify.SPACE_BETWEEN)
+                .children(strandButtons, abandonRow)
+                .visible(false);
+        return strands;
+    }
+
+    /** Which strand is on screen, and what pressing a strand's button or Abandon does. */
+    void onStrands(Consumer<String> show, Consumer<String> abandon) {
+        this.showStrand = show;
+        this.abandon = abandon;
+    }
+
+    /** Bring the strand bar up to {@code all}, with {@code shown} on screen. Rebuilt only when what it says changes. */
+    synchronized void showStrands(List<Doc.Strand> all, String shown) {
+        shownStrand = shown;
+        List<String> says = new ArrayList<>();
+        for (Doc.Strand s : all) {
+            says.add(s.id() + "|" + strandTitle(s) + "|" + s.id().equals(shown));
+        }
+        if (!says.equals(strandSays)) {
+            // children(...) appends, so the old buttons are taken out first.
+            for (Map.Entry<String, Node> e : strandNodes.entrySet()) {
+                gui.clearLandmark(Landmarks.strand(e.getKey()));
+                e.getValue().remove();
+            }
+            strandNodes.clear();
+            for (Doc.Strand s : all) {
+                String id = s.id();
+                Button b = new Button(gui, strandTitle(s))
+                        .kind(id.equals(shown) ? Button.Kind.PRIMARY : Button.Kind.GHOST)
+                        .onPress(() -> showStrand.accept(id));
+                gui.landmark(Landmarks.strand(id), b.node());
+                strandButtons.append(b.node());
+                strandNodes.put(id, b.node());
+            }
+            strandSays = says;
+        }
+        strands.visible(all.size() > 1);
+        abandonRow.visible(!shown.equals(Doc.MAIN));
+    }
+
+    /** {@code Main}, or {@code Branch · <node label>}, with a dot while its agent works. */
+    static String strandTitle(Doc.Strand s) {
+        return (s.isMain() ? "Main" : "Branch · " + s.label()) + (s.busy() ? " •" : "");
     }
 
     /**

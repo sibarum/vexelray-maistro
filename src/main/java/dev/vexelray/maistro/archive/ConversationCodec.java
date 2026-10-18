@@ -31,31 +31,54 @@ import java.util.Map;
 public final class ConversationCodec {
 
     /** Written into every file, so a later build can tell which shape it is reading. */
-    public static final int FORMAT = 1;
+    /** 2 added {@code branches}; a file of format 1 has none, and reads as a conversation without branches. */
+    public static final int FORMAT = 2;
 
     private ConversationCodec() {
     }
 
     public static String encode(Conversation c) {
-        JsonValue.Obj.Builder agent = JsonValue.Obj.builder()
-                .put("sessionId", c.agent().sessionId())
-                .put("model", c.agent().model())
-                .put("cwd", c.agent().cwd())
-                .put("costUsd", c.agent().costUsd())
-                .put("turns", c.agent().turns())
-                .put("inputTokens", c.agent().inputTokens())
-                .put("outputTokens", c.agent().outputTokens());
+        List<JsonValue> branches = new ArrayList<>();
+        for (Conversation.Branch b : c.branches()) {
+            branches.add(JsonValue.Obj.builder()
+                    .put("id", b.id())
+                    .put("from", b.from())
+                    .put("label", b.label())
+                    .put("agent", agent(b.agent()))
+                    .put("transcript", transcript(b.transcript()))
+                    .put("map", map(b.graph(), Map.of(), 0))
+                    .build());
+        }
         return JsonValue.Obj.builder()
                 .put("format", FORMAT)
                 .put("id", c.id())
                 .put("title", c.title())
                 .put("started", c.started())
                 .put("saved", c.saved())
-                .put("agent", agent.build())
+                .put("agent", agent(c.agent()))
                 .put("transcript", transcript(c.transcript()))
                 .put("map", map(c.graph(), c.positions(), c.mindTurn()))
+                .put("branches", new JsonValue.Arr(branches))
                 .build()
                 .toJson();
+    }
+
+    private static JsonValue agent(Conversation.Agent a) {
+        return JsonValue.Obj.builder()
+                .put("sessionId", a.sessionId())
+                .put("model", a.model())
+                .put("cwd", a.cwd())
+                .put("costUsd", a.costUsd())
+                .put("turns", a.turns())
+                .put("inputTokens", a.inputTokens())
+                .put("outputTokens", a.outputTokens())
+                .build();
+    }
+
+    private static Conversation.Agent agent(JsonValue a) {
+        return new Conversation.Agent(a.get("sessionId").asString(), a.get("model").asString(),
+                a.get("cwd").asString(), a.get("costUsd").asDouble(0), (int) a.get("turns").asLong(0),
+                a.get("inputTokens").asLong(0), a.get("outputTokens").asLong(0));
     }
 
     /** @throws IllegalArgumentException if {@code json} is not JSON, or names no conversation id */
@@ -70,14 +93,20 @@ public final class ConversationCodec {
         if (id.isBlank()) {
             throw new IllegalArgumentException("no conversation id");
         }
-        JsonValue a = v.get("agent");
-        Conversation.Agent agent = new Conversation.Agent(a.get("sessionId").asString(), a.get("model").asString(),
-                a.get("cwd").asString(), a.get("costUsd").asDouble(0), (int) a.get("turns").asLong(0),
-                a.get("inputTokens").asLong(0), a.get("outputTokens").asLong(0));
         JsonValue m = v.get("map");
+        List<Conversation.Branch> branches = new ArrayList<>();
+        for (JsonValue b : v.get("branches").items()) {
+            try {
+                branches.add(new Conversation.Branch(b.get("id").asString(), b.get("from").asString(),
+                        b.get("label").asString(), agent(b.get("agent")), transcript(b.get("transcript")),
+                        graph(b.get("map"))));
+            } catch (IllegalArgumentException skipped) {
+                // a branch with no id or no node to start from; the rest of the conversation still loads
+            }
+        }
         return new Conversation(id, v.get("title").asString(), v.get("started").asLong(0), v.get("saved").asLong(0),
-                agent, transcript(v.get("transcript")), graph(m), positions(m.get("positions")),
-                (int) m.get("turn").asLong(0));
+                agent(v.get("agent")), transcript(v.get("transcript")), graph(m), positions(m.get("positions")),
+                (int) m.get("turn").asLong(0), branches);
     }
 
     // ---- the transcript -----------------------------------------------------------------------------------------

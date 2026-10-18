@@ -28,18 +28,195 @@ import java.util.function.UnaryOperator;
  * over by a single reference swap is the whole synchronisation story: there is no instant at which a reader sees
  * half an edit. Add fields here rather than adding state elsewhere.
  *
- * @param transcript the conversation so far
- * @param activity   what the agent is doing, in a few words ({@code idle}, {@code thinking}, {@code running Bash})
- * @param busy       the agent has a turn in progress, so a second message waits and Escape interrupts
- * @param panes      which panes are on show
- * @param agent      what the agent's process said about itself
- * @param mind       the mind map
- * @param status     the last thing the status line was told
- * @param meta       which conversation this is: its id, title and when it started
- * @param library    the list of saved conversations, when it is open
+ * <h2>Strands</h2>
+ *
+ * <p>A conversation is one or more {@link Strand}s: the main one, first, and a branch for each line of thought
+ * started from a node of the map. Each strand has its own transcript and its own Claude Code process; the map is
+ * the main strand's, and a branch's changes to it wait, staged, in the branch. {@link #transcript()},
+ * {@link #activity()}, {@link #busy()} and {@link #agent()} answer for the strand on screen, which is what the window
+ * and a command acting on "this conversation" want; anything acting on one strand in particular names it.
+ *
+ * @param strands the main strand, first, then each branch, in the order they were started
+ * @param showing which strand is on screen, by id
+ * @param panes   which panes are on show
+ * @param mind    the mind map
+ * @param status  the last thing the status line was told
+ * @param meta    which conversation this is: its id, title and when it started
+ * @param library the list of saved conversations, when it is open
  */
-record Doc(Transcript transcript, String activity, boolean busy, Panes panes, AgentInfo agent, Mind mind,
-           String status, Meta meta, Library library) {
+record Doc(List<Strand> strands, String showing, Panes panes, Mind mind, String status, Meta meta,
+           Library library) {
+
+    /** The main strand's id. */
+    static final String MAIN = "main";
+
+    Doc {
+        strands = List.copyOf(strands);
+    }
+
+    /**
+     * One line of the conversation, with its own Claude Code process: the main one, or a branch started from a node.
+     *
+     * @param id         {@link #MAIN}, or {@code b1}, {@code b2}, ...
+     * @param from       the node a branch was started from; empty for the main strand
+     * @param label      what its tab says: the node's label for a branch
+     * @param transcript what was said in it
+     * @param activity   what its agent is doing, in a few words ({@code idle}, {@code thinking}, {@code running Bash})
+     * @param busy       its agent has a turn in progress, so a second message waits and Escape interrupts
+     * @param agent      what its agent's process said about itself
+     * @param graph      a branch's own map: the neighbourhood it was given, grown by its replies, and not yet part
+     *                   of the main map; empty for the main strand, whose replies grow {@link Doc#mind()} directly
+     */
+    record Strand(String id, String from, String label, Transcript transcript, String activity, boolean busy,
+                  AgentInfo agent, MapGraph graph) {
+
+        static final Strand MAIN_EMPTY =
+                new Strand(MAIN, "", "Main", Transcript.empty(), "not started", false, AgentInfo.NONE, MapGraph.EMPTY);
+
+        boolean isMain() {
+            return from.isEmpty();
+        }
+
+        /** A branch from {@code node}, given {@code neighbourhood} as its map. */
+        static Strand branch(String id, dev.vexelray.maistro.map.Node node, MapGraph neighbourhood) {
+            return new Strand(id, node.id(), node.shownLabel(), Transcript.empty(), "not started", false,
+                    AgentInfo.NONE, neighbourhood);
+        }
+
+        /** How many times the human has spoken in it: the turn its own map's nodes are stamped with. */
+        int spoken() {
+            int n = 0;
+            for (dev.vexelray.maistro.chat.Turn t : transcript.turns()) {
+                if (t.who() == dev.vexelray.maistro.chat.Turn.Who.HUMAN) {
+                    n++;
+                }
+            }
+            return n;
+        }
+
+        Strand withTranscript(UnaryOperator<Transcript> change) {
+            return new Strand(id, from, label, change.apply(transcript), activity, busy, agent, graph);
+        }
+
+        Strand withActivity(String value, boolean isBusy) {
+            return new Strand(id, from, label, transcript, value, isBusy, agent, graph);
+        }
+
+        Strand withAgent(UnaryOperator<AgentInfo> change) {
+            return new Strand(id, from, label, transcript, activity, busy, change.apply(agent), graph);
+        }
+
+        Strand withGraph(MapGraph value) {
+            return new Strand(id, from, label, transcript, activity, busy, agent, value);
+        }
+    }
+
+    // ---- the strands -------------------------------------------------------------------------------------------
+
+    Strand main() {
+        return strands.getFirst();
+    }
+
+    /** The strand with {@code id}, if it is still there. */
+    Optional<Strand> strand(String id) {
+        for (Strand s : strands) {
+            if (s.id().equals(id)) {
+                return Optional.of(s);
+            }
+        }
+        return Optional.empty();
+    }
+
+    /** The strand on screen; the main one if {@link #showing} names one that has gone. */
+    Strand shown() {
+        return strand(showing).orElse(main());
+    }
+
+    /** The shown strand's transcript. */
+    Transcript transcript() {
+        return shown().transcript();
+    }
+
+    /** What the shown strand's agent is doing. */
+    String activity() {
+        return shown().activity();
+    }
+
+    /** The shown strand's agent has a turn in progress. */
+    boolean busy() {
+        return shown().busy();
+    }
+
+    /** What the shown strand's agent said about itself. */
+    AgentInfo agent() {
+        return shown().agent();
+    }
+
+    /** Some strand's agent has a turn in progress. */
+    boolean anyBusy() {
+        for (Strand s : strands) {
+            if (s.busy()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Every strand's running totals, added up. */
+    AgentInfo totals() {
+        AgentInfo sum = AgentInfo.NONE;
+        for (Strand s : strands) {
+            AgentInfo a = s.agent();
+            sum = sum.plus(a.costUsd(), a.turns(), a.inputTokens(), a.outputTokens());
+        }
+        return sum;
+    }
+
+    /** Change strand {@code id}; unchanged if it has gone (an event from a branch abandoned meanwhile). */
+    Doc withStrand(String id, UnaryOperator<Strand> change) {
+        List<Strand> next = new java.util.ArrayList<>(strands.size());
+        for (Strand s : strands) {
+            next.add(s.id().equals(id) ? change.apply(s) : s);
+        }
+        return new Doc(next, showing, panes, mind, status, meta, library);
+    }
+
+    /** Add a branch, and show it. */
+    Doc withBranch(Strand branch) {
+        List<Strand> next = new java.util.ArrayList<>(strands);
+        next.add(branch);
+        return new Doc(next, branch.id(), panes, mind, status, meta, library);
+    }
+
+    /** Take branch {@code id} away, its staged map with it, and show the main strand if it was on screen. */
+    Doc withoutBranch(String id) {
+        if (id.equals(MAIN)) {
+            return this;
+        }
+        List<Strand> next = new java.util.ArrayList<>(strands);
+        next.removeIf(s -> s.id().equals(id));
+        return new Doc(next, showing.equals(id) ? MAIN : showing, panes, mind, status, meta, library);
+    }
+
+    /** Put strand {@code id} on screen; unchanged if there is no such strand. */
+    Doc showing(String id) {
+        return strand(id).isPresent() ? new Doc(strands, id, panes, mind, status, meta, library) : this;
+    }
+
+    /** An id for the next branch: one past the highest in use. */
+    String nextBranchId() {
+        int highest = 0;
+        for (Strand s : strands) {
+            if (s.id().startsWith("b")) {
+                try {
+                    highest = Math.max(highest, Integer.parseInt(s.id().substring(1)));
+                } catch (NumberFormatException ignored) {
+                    // not one of ours
+                }
+            }
+        }
+        return "b" + (highest + 1);
+    }
 
     /** Which of the three panes are on show. Each toggles on its own; the map takes whatever room is left. */
     record Panes(boolean conversation, boolean map, boolean context) {
@@ -169,6 +346,26 @@ record Doc(Transcript transcript, String activity, boolean busy, Panes panes, Ag
         }
 
         /**
+         * The map as it would be with {@code branch}'s staged nodes and links on it, for drawing a branch: the main
+         * map's nodes stay where they are and keep their labels, and the branch's new ones are laid out around them.
+         * Nothing here is committed; merging is a separate step.
+         */
+        Mind staging(MapGraph branch) {
+            MapGraph union = graph;
+            for (dev.vexelray.maistro.map.Node n : branch.nodes()) {
+                if (!union.contains(n.id())) {
+                    union = union.withNode(n);
+                }
+            }
+            for (dev.vexelray.maistro.map.Edge e : branch.edges()) {
+                if (union.edge(e.from(), e.to()).isEmpty()) {
+                    union = union.withEdge(e);
+                }
+            }
+            return union == graph ? this : new Mind(union, Layout.next(positions, union, Mind::size), turn, anchor);
+        }
+
+        /**
          * The graph changed: lay it out against where everything was, and drop the anchor if its node went. Pure, so
          * it may run inside a commit.
          */
@@ -223,7 +420,7 @@ record Doc(Transcript transcript, String activity, boolean busy, Panes panes, Ag
     }
 
     static Doc initial() {
-        return new Doc(Transcript.empty(), "not started", false, Panes.ALL, AgentInfo.NONE, Mind.EMPTY, "",
+        return new Doc(List.of(Strand.MAIN_EMPTY), MAIN, Panes.ALL, Mind.EMPTY, "",
                 Meta.startingAt(System.currentTimeMillis()), Library.CLOSED);
     }
 
@@ -237,44 +434,40 @@ record Doc(Transcript transcript, String activity, boolean busy, Panes panes, Ag
      * running; the next message starts it with {@code --resume}.
      */
     Doc resumed(Conversation c) {
-        Conversation.Agent a = c.agent();
-        return new Doc(c.transcript(), "not started", false, panes,
-                new AgentInfo(a.sessionId(), a.model(), a.cwd(), a.costUsd(), a.turns(), a.inputTokens(),
-                        a.outputTokens()),
-                new Mind(c.graph(), c.positions(), c.mindTurn(), ""),
+        List<Strand> next = new java.util.ArrayList<>();
+        next.add(new Strand(MAIN, "", "Main", c.transcript(), "not started", false, info(c.agent()),
+                MapGraph.EMPTY));
+        for (Conversation.Branch b : c.branches()) {
+            next.add(new Strand(b.id(), b.from(), b.label(), b.transcript(), "not started", false, info(b.agent()),
+                    b.graph()));
+        }
+        return new Doc(next, MAIN, panes, new Mind(c.graph(), c.positions(), c.mindTurn(), ""),
                 "Resumed: " + (c.title().isEmpty() ? "(untitled)" : c.title()),
                 new Meta(c.id(), c.title(), c.started()), Library.CLOSED);
     }
 
+    private static AgentInfo info(Conversation.Agent a) {
+        return new AgentInfo(a.sessionId(), a.model(), a.cwd(), a.costUsd(), a.turns(), a.inputTokens(),
+                a.outputTokens());
+    }
+
     Doc withMeta(UnaryOperator<Meta> change) {
-        return new Doc(transcript, activity, busy, panes, agent, mind, status, change.apply(meta), library);
+        return new Doc(strands, showing, panes, mind, status, change.apply(meta), library);
     }
 
     Doc withLibrary(UnaryOperator<Library> change) {
-        return new Doc(transcript, activity, busy, panes, agent, mind, status, meta, change.apply(library));
-    }
-
-    Doc withTranscript(UnaryOperator<Transcript> change) {
-        return new Doc(change.apply(transcript), activity, busy, panes, agent, mind, status, meta, library);
-    }
-
-    Doc withActivity(String value, boolean isBusy) {
-        return new Doc(transcript, value, isBusy, panes, agent, mind, status, meta, library);
+        return new Doc(strands, showing, panes, mind, status, meta, change.apply(library));
     }
 
     Doc withPanes(Panes value) {
-        return new Doc(transcript, activity, busy, value, agent, mind, status, meta, library);
-    }
-
-    Doc withAgent(UnaryOperator<AgentInfo> change) {
-        return new Doc(transcript, activity, busy, panes, change.apply(agent), mind, status, meta, library);
+        return new Doc(strands, showing, value, mind, status, meta, library);
     }
 
     Doc withMind(UnaryOperator<Mind> change) {
-        return new Doc(transcript, activity, busy, panes, agent, change.apply(mind), status, meta, library);
+        return new Doc(strands, showing, panes, change.apply(mind), status, meta, library);
     }
 
     Doc withStatus(String value) {
-        return new Doc(transcript, activity, busy, panes, agent, mind, value, meta, library);
+        return new Doc(strands, showing, panes, mind, value, meta, library);
     }
 }

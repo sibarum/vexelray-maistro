@@ -30,7 +30,12 @@ class ArchiveTest {
     }
 
     private static Doc said(Doc d, String text) {
-        return d.withTranscript(t -> t.append(id -> Turn.human(id, text))).withMeta(m -> m.titled(text));
+        return d.withStrand(Doc.MAIN, s -> s.withTranscript(t -> t.append(id -> Turn.human(id, text))))
+                .withMeta(m -> m.titled(text));
+    }
+
+    private static Doc busy(Doc d) {
+        return d.withStrand(Doc.MAIN, s -> s.withActivity("thinking", true));
     }
 
     private String saved(Archive a, Doc d) throws Exception {
@@ -52,7 +57,7 @@ class ArchiveTest {
         Archive a = archive();
         a.changed(Doc.initial());
         Doc d = said(Doc.initial(), "hello");
-        a.changed(d.withActivity("thinking", true));
+        a.changed(busy(d));
         assertTrue(lane.isEmpty(), "an empty conversation, and one mid-turn, are not saved");
         a.changed(d);
         a.changed(d.withPanes(new Doc.Panes(true, false, true)));
@@ -66,7 +71,7 @@ class ArchiveTest {
     @Test
     void closingSavesEvenMidTurnOnItsOwnThread() throws Exception {
         Archive a = archive();
-        Doc d = said(Doc.initial(), "hello").withActivity("thinking", true);
+        Doc d = busy(said(Doc.initial(), "hello"));
         a.changed(d);
         assertTrue(lane.isEmpty());
         a.close();

@@ -80,6 +80,7 @@ groups the button with other Java programs, and pinning it pins Java. The native
 | Ctrl+L | put the keyboard in the composer |
 | Ctrl+N | a new conversation (refused while the agent is mid-turn: Escape first) |
 | Ctrl+O | the saved conversations, newest first; click one, or Enter, to carry on with it |
+| Ctrl+B | a branch from the focused node of the map (also "Branch from here" in the context stream) |
 | Ctrl+1 / Ctrl+2 / Ctrl+3 | show or hide the conversation, the mind map, the context stream |
 | Ctrl+= / Ctrl+- / Ctrl+0 | zoom |
 
@@ -106,6 +107,15 @@ settings)`. Choosing one allows the tool and sends the suggestion back unchanged
 turn keeps a chip saying what was set up. Maistro offers only the kinds it can put into words, and makes no rule of
 its own.
 
+A **branch** is a second Claude Code session started from a node: Ctrl+B with a node focused. It is given that
+node's neighbourhood (the node and what it links to directly) and nothing of the conversation, and has its own
+transcript, process and cost. Its tab sits beside `Main` over the transcript, with a dot while it works, and the
+composer, Escape and the permission buttons act on the strand on screen. What a branch adds to the map is
+**staged**: kept in the branch, drawn outlined in teal with dashed links while the branch is on screen, and not
+part of the map. **Abandon branch** ends its process and drops it, staged nodes and all. Merging a branch back is
+the next slice. Ctrl+N is refused while any strand is working, and a saved conversation keeps its branches, each
+resuming its own session.
+
 ## How it is put together
 
 Read these in this order.
@@ -113,8 +123,8 @@ Read these in this order.
 | File | What belongs in it |
 | --- | --- |
 | `Recipes.java` | **what this application builds.** One `@Provides` method per part; `MaistroAppWiring`, which builds them in order, is generated from it while the project compiles. A part's phase is the latest phase of anything it takes, so there is none to declare. New parts go here. |
-| `Doc.java`, `Model.java` | the session: the transcript, what the agent is doing, which panes are up, the agent's own readouts and the mind map, as one immutable value changed only by functions of the current value, committed through atchung's `State`. |
-| `Conductor.java` | the agent's side: one Claude Code process, and each of its events turned into one commit to the model. |
+| `Doc.java`, `Model.java` | the session: its strands (the main one and each branch, with its transcript, what its agent is doing and its readouts), which panes are up and the mind map, as one immutable value changed only by functions of the current value, committed through atchung's `State`. |
+| `Conductor.java` | the agent's side: a Claude Code process per strand (a `Lane`), and each of its events turned into one commit to its strand. |
 | `Archive.java` | every conversation kept, one JSON file each under `~/.vexelray-maistro/conversations/`, written on the offload lane when a turn ends and once more as the application closes. |
 | `Ui.java` and its panes | the window: `PaneRail`, `ConversationPane`, `MapPane`, `ContextPane`. Hold no state; `show(Doc)` writes everything derived from the session. |
 | `Actions.java` | every command and its chord. |
@@ -250,6 +260,12 @@ once:
 ```
 ottermate --script src/test/ottermate/permission.txt --launch mvn.cmd compile exec:exec -Dautomation=0 "-Dapp.args=--claude=src/test/ottermate/fake-claude-permission.cmd"
 ```
+
+A replay can answer some messages differently: a `#when <text>` line starts the lines played instead when a message
+contains `<text>`. `replay-map-turn.jsonl` answers a branch's first message (`#when You are a branch`) with a node
+of its own, and `branch.txt` uses it: it starts a branch from a node, asks it something, looks at the staged map,
+switches to `Main` and abandons the branch. The stand-in appends to `target/fake-claude-stdin.txt` and never empties
+it, one `#process` line per process, so a branch's messages land below main's.
 
 A run under `ottermate` that ends a turn saves the conversation into your real `~/.vexelray-maistro`. To keep a check
 out of it, give the run a home of its own. That moves the settings and the log there too

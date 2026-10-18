@@ -3,7 +3,6 @@ package dev.vexelray.maistro;
 import dev.vexelray.maistro.archive.Conversation;
 import dev.vexelray.maistro.archive.ConversationCodec;
 import dev.vexelray.maistro.archive.Summary;
-import dev.vexelray.maistro.chat.Transcript;
 import dev.vexelray.maistro.map.Layout;
 import dev.vexelray.maistro.map.MapGraph;
 import sibarum.probe.Log;
@@ -61,11 +60,10 @@ final class Archive implements AutoCloseable {
     private volatile Doc latest;
 
     /** What decides whether a session needs saving again; everything in a {@link Conversation} but the times. */
-    private record Saved(Doc.Meta meta, Transcript transcript, MapGraph graph, Map<String, Layout.Point> positions,
-                         Doc.AgentInfo agent) {
+    private record Saved(Doc.Meta meta, List<Doc.Strand> strands, MapGraph graph, Map<String, Layout.Point> positions) {
 
         static Saved of(Doc d) {
-            return new Saved(d.meta(), d.transcript(), d.mind().graph(), d.mind().positions(), d.agent());
+            return new Saved(d.meta(), d.strands(), d.mind().graph(), d.mind().positions());
         }
     }
 
@@ -90,7 +88,7 @@ final class Archive implements AutoCloseable {
             return;
         }
         latest = d;
-        if (d.busy()) {
+        if (d.anyBusy()) {
             return;
         }
         Handed h = handOver(d);
@@ -120,7 +118,7 @@ final class Archive implements AutoCloseable {
 
     /** Number {@code d} for writing and return it as kept, or null if it is empty or nothing changed. */
     private synchronized Handed handOver(Doc d) {
-        if (d.transcript().size() == 0) {
+        if (d.strands().stream().allMatch(s -> s.transcript().size() == 0)) {
             return null;
         }
         Saved now = Saved.of(d);
@@ -135,11 +133,22 @@ final class Archive implements AutoCloseable {
 
     /** The session as it is kept. */
     static Conversation conversation(Doc d) {
-        Doc.AgentInfo a = d.agent();
+        List<Conversation.Branch> branches = new ArrayList<>();
+        for (Doc.Strand s : d.strands()) {
+            if (!s.isMain()) {
+                branches.add(new Conversation.Branch(s.id(), s.from(), s.label(), agent(s.agent()), s.transcript(),
+                        s.graph()));
+            }
+        }
+        Doc.Strand main = d.main();
         return new Conversation(d.meta().id(), d.meta().title(), d.meta().started(), System.currentTimeMillis(),
-                new Conversation.Agent(a.sessionId(), a.model(), a.cwd(), a.costUsd(), a.turns(), a.inputTokens(),
-                        a.outputTokens()),
-                d.transcript(), d.mind().graph(), d.mind().positions(), d.mind().turn());
+                agent(main.agent()), main.transcript(), d.mind().graph(), d.mind().positions(), d.mind().turn(),
+                branches);
+    }
+
+    private static Conversation.Agent agent(Doc.AgentInfo a) {
+        return new Conversation.Agent(a.sessionId(), a.model(), a.cwd(), a.costUsd(), a.turns(), a.inputTokens(),
+                a.outputTokens());
     }
 
     /**

@@ -1,0 +1,28 @@
+await composer
+click composer
+type hello
+key ENTER
+await context.focus KV cache
+await status.agent idle
+click map.node.beta
+await context.focus Surprise score
+key CTRL+B
+await strand.b1
+settle
+shot target/branch-new.png
+click composer
+type what follows from it?
+key ENTER
+await status.agent idle
+settle
+find staged
+shot target/branch-staged.png
+click strand.main
+settle
+find Delta
+shot target/branch-main.png
+click strand.b1
+click branch.abandon
+settle
+find Abandoned
+shot target/branch-abandoned.png

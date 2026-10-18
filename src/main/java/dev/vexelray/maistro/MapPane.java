@@ -60,7 +60,10 @@ final class MapPane {
     private final Color amber;
     private final Color onAmber;
 
+    /** What is drawn: the map, with a branch's staged nodes on it when a branch is shown. */
     private Doc.Mind mind = Doc.Mind.EMPTY;
+    /** The map itself, without anything staged: what is clickable, and what "from the last turn" means. */
+    private MapGraph committed = MapGraph.EMPTY;
     private float width;
     private float height;
 
@@ -104,12 +107,18 @@ final class MapPane {
         return root;
     }
 
-    /** Draw {@code next}, if it is not what is already drawn. */
-    synchronized void show(Doc.Mind next) {
-        if (next.equals(mind)) {
+    /**
+     * Draw the map, with {@code shown}'s staged nodes and links on it if it is a branch, if that is not what is
+     * already drawn. Staged nodes are outlined in teal and not filled, their links dashed, and they are not
+     * clickable: they are not part of the map until the branch is merged.
+     */
+    synchronized void show(Doc.Mind main, Doc.Strand shown) {
+        Doc.Mind next = shown.isMain() ? main : main.staging(shown.graph());
+        if (next.equals(mind) && main.graph().equals(committed)) {
             return;
         }
         mind = next;
+        committed = main.graph();
         hint.visible(next.graph().isEmpty());
         draw();
     }
@@ -127,7 +136,7 @@ final class MapPane {
         MapGraph graph = mind.graph();
         if (graph.isEmpty() || width <= 0 || height <= 0) {
             layer.picture(new Sketch().picture());
-            forgetTargetsNotIn(graph);
+            forgetTargetsNotIn(committed);
             return;
         }
         Layout.Box fit = Layout.fit(mind.positions(), graph, Doc.Mind::size);
@@ -136,7 +145,7 @@ final class MapPane {
         double cy = height / 2.0 - fit.centre().y() * scale;
 
         Set<String> fresh = new HashSet<>();
-        for (dev.vexelray.maistro.map.Node n : graph.addedInLatestTurn()) {
+        for (dev.vexelray.maistro.map.Node n : committed.addedInLatestTurn()) {
             fresh.add(n.id());
         }
         String focus = graph.focus().orElse("");
@@ -145,9 +154,19 @@ final class MapPane {
         for (Edge e : graph.edges()) {
             Layout.Point a = mind.positions().get(e.from());
             Layout.Point b = mind.positions().get(e.to());
-            if (a != null && b != null) {
-                sketch.line(cx + a.x() * scale, cy + a.y() * scale, cx + b.x() * scale, cy + b.y() * scale,
-                        Math.max(1, 1.5 * scale), Look.SETTLED);
+            if (a == null || b == null) {
+                continue;
+            }
+            double x0 = cx + a.x() * scale;
+            double y0 = cy + a.y() * scale;
+            double x1 = cx + b.x() * scale;
+            double y1 = cy + b.y() * scale;
+            double thick = Math.max(1, 1.5 * scale);
+            if (committed.edge(e.from(), e.to()).isPresent()) {
+                sketch.line(x0, y0, x1, y1, thick, Look.SETTLED);
+            } else {
+                dashed(sketch.tag("staged"), x0, y0, x1, y1, thick, 6 * scale);
+                sketch.tag("edge");
             }
         }
         for (dev.vexelray.maistro.map.Node n : graph.nodes()) {
@@ -160,18 +179,44 @@ final class MapPane {
             double h = size.height() * scale;
             double x = cx + p.x() * scale - w / 2;
             double y = cy + p.y() * scale - h / 2;
+            double text = LABEL * scale;
+            if (!committed.contains(n.id())) {
+                // Filled with the stage, so a link stops at its edge as it does at a real node's.
+                sketch.tag("staged").fill(x, y, w, h, h / 2, onAmber)
+                        .outline(x, y, w, h, h / 2, Math.max(1, 1.5 * scale), Look.SETTLED);
+                sketch.tag("label").text(n.shownLabel(), x + Doc.Mind.PAD / 2 * scale, y + h / 2 + text * 0.35,
+                        text, dim);
+                continue;
+            }
             place(n, x, y, w, h);
             boolean focused = n.id().equals(focus);
             sketch.tag("node").fill(x, y, w, h, h / 2, focused ? amber : box);
             if (fresh.contains(n.id()) && !focused) {
                 sketch.tag("fresh").outline(x, y, w, h, h / 2, Math.max(1, 1.5 * scale), amber);
             }
-            double text = LABEL * scale;
             sketch.tag("label").text(n.shownLabel(), x + Doc.Mind.PAD / 2 * scale, y + h / 2 + text * 0.35, text,
                     focused ? onAmber : fresh.contains(n.id()) ? ink : dim);
         }
         layer.picture(sketch.picture());
-        forgetTargetsNotIn(graph);
+        forgetTargetsNotIn(committed);
+    }
+
+    /**
+     * A dashed line: {@code Sketch} draws only solid ones, so this lays dashes of {@code dash} along it with gaps
+     * of the same length (framework-notes FN-10).
+     */
+    private static void dashed(Sketch sketch, double x0, double y0, double x1, double y1, double thick,
+                               double dash) {
+        double length = Math.hypot(x1 - x0, y1 - y0);
+        if (length == 0 || dash <= 0) {
+            return;
+        }
+        double ux = (x1 - x0) / length;
+        double uy = (y1 - y0) / length;
+        for (double at = 0; at < length; at += 2 * dash) {
+            double end = Math.min(length, at + dash);
+            sketch.line(x0 + ux * at, y0 + uy * at, x0 + ux * end, y0 + uy * end, thick, Look.SETTLED);
+        }
     }
 
     /** Put {@code n}'s box over where it is drawn, making the box the first time. */

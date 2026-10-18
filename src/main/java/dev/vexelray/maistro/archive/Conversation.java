@@ -4,6 +4,7 @@ import dev.vexelray.maistro.chat.Transcript;
 import dev.vexelray.maistro.map.Layout;
 import dev.vexelray.maistro.map.MapGraph;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -23,9 +24,37 @@ import java.util.Map;
  * @param graph     the mind map
  * @param positions where each node of the map sat
  * @param mindTurn  how many times the human had spoken, the turn the map's nodes are stamped against
+ * @param branches  the branches still open, each with its own transcript, agent and staged map
  */
 public record Conversation(String id, String title, long started, long saved, Agent agent, Transcript transcript,
-                           MapGraph graph, Map<String, Layout.Point> positions, int mindTurn) {
+                           MapGraph graph, Map<String, Layout.Point> positions, int mindTurn,
+                           List<Branch> branches) {
+
+    /** A conversation with no branches. */
+    public Conversation(String id, String title, long started, long saved, Agent agent, Transcript transcript,
+                        MapGraph graph, Map<String, Layout.Point> positions, int mindTurn) {
+        this(id, title, started, saved, agent, transcript, graph, positions, mindTurn, List.of());
+    }
+
+    /**
+     * A branch started from a node of the map, with its own Claude Code session.
+     *
+     * @param from  the node it was started from
+     * @param label what its tab says
+     * @param graph its own map: the neighbourhood it was given, grown by its replies, not yet merged
+     */
+    public record Branch(String id, String from, String label, Agent agent, Transcript transcript, MapGraph graph) {
+
+        public Branch {
+            if (id == null || id.isBlank() || from == null || from.isBlank()) {
+                throw new IllegalArgumentException("a branch needs an id and the node it started from");
+            }
+            label = label == null ? "" : label;
+            agent = agent == null ? Agent.NONE : agent;
+            transcript = transcript == null ? Transcript.empty() : transcript;
+            graph = graph == null ? MapGraph.EMPTY : graph;
+        }
+    }
 
     /**
      * The agent's side: the Claude Code session to resume, and its totals.
@@ -53,6 +82,7 @@ public record Conversation(String id, String title, long started, long saved, Ag
         transcript = transcript == null ? Transcript.empty() : transcript;
         graph = graph == null ? MapGraph.EMPTY : graph;
         positions = positions == null ? Map.of() : Map.copyOf(positions);
+        branches = branches == null ? List.of() : List.copyOf(branches);
     }
 
     /** The longest title a list shows. */

@@ -131,3 +131,12 @@ each target, and the line from the window's corner to the composer crosses that 
 from a pass and not close when the pointer leaves. Not reproduced on purpose; the other dozen runs show none.
 Worth checking whether a tip that opens mid-travel is closed on the next pointer move. It is the one thing in this
 application that appears on hover, and only the framework's tips do.
+
+## FN-10 · `Sketch` draws only solid lines 🔬
+
+A branch's staged links are drawn dashed, so they read as not yet part of the map. `Sketch` has `line` and
+`polyline`, both solid, and nothing for a dash pattern, so `MapPane.dashed` lays dash after dash along the line
+itself. It costs a mark per dash, and the dashes restart at each end rather than flowing along a path.
+
+What the framework could do: a `dash(double on, double off)` state on `Sketch`, like `tag`, applied to the lines
+and outlines drawn after it, and passed through to SVG as `stroke-dasharray`.

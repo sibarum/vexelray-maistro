@@ -6,6 +6,7 @@ import dev.vexelray.gui.core.layout.LayoutEnums.AlignItems;
 import dev.vexelray.gui.core.layout.LayoutEnums.Justify;
 import dev.vexelray.gui.core.layout.Length;
 import dev.vexelray.gui.core.style.Role;
+import dev.vexelray.gui.widget.Button;
 import dev.vexelray.maistro.map.Edge;
 import dev.vexelray.maistro.map.MapGraph;
 
@@ -33,6 +34,11 @@ final class ContextPane {
     private final Node tokens;
     private final Node focus;
     private final Node links;
+    private final Node branch;
+    private final Node all;
+    private final Node allRow;
+
+    private volatile Runnable branchAction = () -> { };
 
     ContextPane(Gui gui) {
         this.gui = gui;
@@ -40,6 +46,11 @@ final class ContextPane {
                 .wordWrap(true).width(Length.FILL);
         gui.landmark(Landmarks.CONTEXT_FOCUS, focus);
         links = note("");
+        Button branchButton = new Button(gui, "Branch from here (Ctrl+B)").kind(Button.Kind.SECONDARY)
+                .onPress(() -> branchAction.run());
+        gui.landmark(Landmarks.CONTEXT_BRANCH, branchButton.node());
+        this.branch = branchButton.node();
+        all = value();
         model = value();
         session = value();
         folder = value();
@@ -53,7 +64,8 @@ final class ContextPane {
                 readout("folder", folder),
                 readout("turns", turns),
                 readout("cost", cost),
-                readout("tokens", tokens));
+                readout("tokens", tokens),
+                allRow = readout("all strands", all));
         gui.landmark(Landmarks.CONTEXT_SESSION, sessionSection);
 
         root = gui.column()
@@ -63,7 +75,7 @@ final class ContextPane {
                 .alignItems(AlignItems.STRETCH)
                 .scroll(false, true)
                 .children(ConversationPane.header(gui, "CONTEXT STREAM"),
-                        section("FOCUS", focus, links),
+                        section("FOCUS", focus, links, this.branch),
                         sessionSection,
                         section("KV CACHE", note("Not connected yet.")),
                         section("VECTOR INDEX", note("Not connected yet.")),
@@ -71,6 +83,7 @@ final class ContextPane {
         gui.landmark(Landmarks.CONTEXT, root);
         show(Doc.AgentInfo.NONE);
         show(MapGraph.EMPTY);
+        showTotals(Doc.AgentInfo.NONE, 1);
     }
 
     Node node() {
@@ -87,15 +100,28 @@ final class ContextPane {
         tokens.text(info.inputTokens() + " in / " + info.outputTokens() + " out");
     }
 
+    /** What "Branch from here" does. */
+    void onBranch(Runnable action) {
+        this.branchAction = action;
+    }
+
+    /** The cost of every strand together; shown only when there is more than the main one. */
+    void showTotals(Doc.AgentInfo totals, int strands) {
+        all.text(String.format(Locale.ROOT, "$%.4f in %d strands", totals.costUsd(), strands));
+        allRow.visible(strands > 1);
+    }
+
     /** Write the focus: the focused node's label and what it links to, or how to focus one. */
     void show(MapGraph graph) {
         dev.vexelray.maistro.map.Node node = graph.focus().flatMap(graph::node).orElse(null);
         if (node == null) {
             focus.visible(false).text("");
+            branch.visible(false);
             links.text("Click a node in the map to focus it.");
             return;
         }
         focus.visible(true).text(node.shownLabel());
+        branch.visible(true);
         links.text(linkedTo(graph, node.id()));
     }
 
