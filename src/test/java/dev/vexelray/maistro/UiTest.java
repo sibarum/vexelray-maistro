@@ -310,6 +310,59 @@ class UiTest {
     }
 
     @Test
+    void mergingABranchAddsItsMapNotesItAndTellsMainNext() {
+        Conductor c = chain();
+        c.branch();
+        c.lane("b1").onAssistantText(new AgentEvent.AssistantText("m2", """
+                Beta is really Bee, and Xi follows.
+
+                ```maistro-map
+                node b "Bee"
+                node x "Xi"
+                edge b x
+                ```""", ""));
+        c.lane("b1").onResult(result(true, 0.1, 1));
+        assertTrue(c.merge("b1"));
+
+        Doc doc = wiring.model().doc();
+        assertTrue(doc.strand("b1").isEmpty(), "a merged branch goes");
+        assertEquals(Doc.MAIN, doc.shown().id());
+        MapGraph map = doc.mind().graph();
+        assertEquals("Beta", map.node("b").orElseThrow().label());
+        assertEquals("Bee", map.node("b~b1").orElseThrow().label());
+        assertTrue(map.edge("b~b1", "x").isPresent());
+        assertTrue(doc.mind().positions().containsKey("x"), "laid out with the rest");
+
+        Turn note = doc.main().transcript().last();
+        assertEquals(Turn.Who.NOTE, note.who());
+        // Two links: b~b1 to x, and the a—b the branch was given, which follows its b to b~b1.
+        assertEquals("Merged the branch from Alpha: +2 nodes, +2 links; b came in as b~b1", note.text());
+        assertTrue(map.edge("a", "b~b1").isPresent());
+        assertEquals(1, doc.main().news().size());
+        String news = doc.main().news().getFirst();
+        assertTrue(news.contains("Its last reply:\n\nBeta is really Bee, and Xi follows."), news);
+        assertTrue(news.contains("node x \"Xi\""), news);
+        assertTrue(news.contains("b -> b~b1"), news);
+        assertFalse(news.contains("node c"), "only what was added: " + news);
+
+        dev.vexelray.maistro.archive.Conversation saved = dev.vexelray.maistro.archive.ConversationCodec.decode(
+                dev.vexelray.maistro.archive.ConversationCodec.encode(Archive.conversation(doc)));
+        assertEquals(doc.main().news(), saved.news(), "what main is still to be told is kept");
+        assertFalse(c.merge("b1"), "it is not there to merge twice");
+        assertFalse(c.merge(Doc.MAIN));
+    }
+
+    @Test
+    void aWorkingBranchIsNotMerged() {
+        Conductor c = chain();
+        c.branch();
+        c.lane("b1").onTextDelta(new AgentEvent.TextDelta(0, "still going", ""));
+        assertFalse(c.merge("b1"));
+        assertTrue(wiring.model().doc().strand("b1").isPresent());
+        assertTrue(wiring.model().doc().status().contains("merge"));
+    }
+
+    @Test
     void branchesAreSavedAndComeBack() {
         Conductor c = chain();
         c.branch();

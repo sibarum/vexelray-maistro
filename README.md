@@ -112,8 +112,12 @@ node's neighbourhood (the node and what it links to directly) and nothing of the
 transcript, process and cost. Its tab sits beside `Main` over the transcript, with a dot while it works, and the
 composer, Escape and the permission buttons act on the strand on screen. What a branch adds to the map is
 **staged**: kept in the branch, drawn outlined in teal with dashed links while the branch is on screen, and not
-part of the map. **Abandon branch** ends its process and drops it, staged nodes and all. Merging a branch back is
-the next slice. Ctrl+N is refused while any strand is working, and a saved conversation keeps its branches, each
+part of the map. **Abandon** ends its process and drops it, staged nodes and all. **Merge into main** brings it
+back: a branch only adds, so a node the map has as it is stays put, an id the branch used for something else
+comes in renamed as `id~<branch>` with its links following, and nothing carved comes back. The main transcript
+gets a note saying what came in, and the main agent, which never saw the branch, is told with its next message
+what the branch last said and what it added (the message wears `told · 1 merged branch`). Ctrl+N is refused
+while any strand is working, and a saved conversation keeps its branches, each
 resuming its own session.
 
 ## How it is put together
@@ -264,7 +268,7 @@ ottermate --script src/test/ottermate/permission.txt --launch mvn.cmd compile ex
 A replay can answer some messages differently: a `#when <text>` line starts the lines played instead when a message
 contains `<text>`. `replay-map-turn.jsonl` answers a branch's first message (`#when You are a branch`) with a node
 of its own, and `branch.txt` uses it: it starts a branch from a node, asks it something, looks at the staged map,
-switches to `Main` and abandons the branch. The stand-in appends to `target/fake-claude-stdin.txt` and never empties
+switches to `Main` and abandons the branch; `merge.txt` merges one instead and checks what the main agent is told. The stand-in appends to `target/fake-claude-stdin.txt` and never empties
 it, one `#process` line per process, so a branch's messages land below main's.
 
 A run under `ottermate` that ends a turn saves the conversation into your real `~/.vexelray-maistro`. To keep a check

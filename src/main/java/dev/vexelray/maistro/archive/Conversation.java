@@ -25,15 +25,16 @@ import java.util.Map;
  * @param positions where each node of the map sat
  * @param mindTurn  how many times the human had spoken, the turn the map's nodes are stamped against
  * @param branches  the branches still open, each with its own transcript, agent and staged map
+ * @param news      what the main agent is still to be told: branches merged since it last spoke
  */
 public record Conversation(String id, String title, long started, long saved, Agent agent, Transcript transcript,
                            MapGraph graph, Map<String, Layout.Point> positions, int mindTurn,
-                           List<Branch> branches) {
+                           List<Branch> branches, List<String> news) {
 
     /** A conversation with no branches. */
     public Conversation(String id, String title, long started, long saved, Agent agent, Transcript transcript,
                         MapGraph graph, Map<String, Layout.Point> positions, int mindTurn) {
-        this(id, title, started, saved, agent, transcript, graph, positions, mindTurn, List.of());
+        this(id, title, started, saved, agent, transcript, graph, positions, mindTurn, List.of(), List.of());
     }
 
     /**
@@ -83,6 +84,7 @@ public record Conversation(String id, String title, long started, long saved, Ag
         graph = graph == null ? MapGraph.EMPTY : graph;
         positions = positions == null ? Map.of() : Map.copyOf(positions);
         branches = branches == null ? List.of() : List.copyOf(branches);
+        news = news == null ? List.of() : List.copyOf(news);
     }
 
     /** The longest title a list shows. */

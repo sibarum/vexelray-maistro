@@ -66,12 +66,19 @@ record Doc(List<Strand> strands, String showing, Panes panes, Mind mind, String 
      * @param agent      what its agent's process said about itself
      * @param graph      a branch's own map: the neighbourhood it was given, grown by its replies, and not yet part
      *                   of the main map; empty for the main strand, whose replies grow {@link Doc#mind()} directly
+     * @param news       what its agent is to be told ahead of the next message: for the main strand, the branches
+     *                   merged into it since it last spoke, which it has not otherwise seen
      */
     record Strand(String id, String from, String label, Transcript transcript, String activity, boolean busy,
-                  AgentInfo agent, MapGraph graph) {
+                  AgentInfo agent, MapGraph graph, List<String> news) {
+
+        Strand {
+            news = List.copyOf(news);
+        }
 
         static final Strand MAIN_EMPTY =
-                new Strand(MAIN, "", "Main", Transcript.empty(), "not started", false, AgentInfo.NONE, MapGraph.EMPTY);
+                new Strand(MAIN, "", "Main", Transcript.empty(), "not started", false, AgentInfo.NONE, MapGraph.EMPTY,
+                        List.of());
 
         boolean isMain() {
             return from.isEmpty();
@@ -80,7 +87,7 @@ record Doc(List<Strand> strands, String showing, Panes panes, Mind mind, String 
         /** A branch from {@code node}, given {@code neighbourhood} as its map. */
         static Strand branch(String id, dev.vexelray.maistro.map.Node node, MapGraph neighbourhood) {
             return new Strand(id, node.id(), node.shownLabel(), Transcript.empty(), "not started", false,
-                    AgentInfo.NONE, neighbourhood);
+                    AgentInfo.NONE, neighbourhood, List.of());
         }
 
         /** How many times the human has spoken in it: the turn its own map's nodes are stamped with. */
@@ -95,19 +102,32 @@ record Doc(List<Strand> strands, String showing, Panes panes, Mind mind, String 
         }
 
         Strand withTranscript(UnaryOperator<Transcript> change) {
-            return new Strand(id, from, label, change.apply(transcript), activity, busy, agent, graph);
+            return new Strand(id, from, label, change.apply(transcript), activity, busy, agent, graph, news);
         }
 
         Strand withActivity(String value, boolean isBusy) {
-            return new Strand(id, from, label, transcript, value, isBusy, agent, graph);
+            return new Strand(id, from, label, transcript, value, isBusy, agent, graph, news);
         }
 
         Strand withAgent(UnaryOperator<AgentInfo> change) {
-            return new Strand(id, from, label, transcript, activity, busy, change.apply(agent), graph);
+            return new Strand(id, from, label, transcript, activity, busy, change.apply(agent), graph, news);
         }
 
         Strand withGraph(MapGraph value) {
-            return new Strand(id, from, label, transcript, activity, busy, agent, value);
+            return new Strand(id, from, label, transcript, activity, busy, agent, value, news);
+        }
+
+        /** {@code item} to be told to this strand's agent with the next message. */
+        Strand toldNext(String item) {
+            List<String> more = new java.util.ArrayList<>(news);
+            more.add(item);
+            return new Strand(id, from, label, transcript, activity, busy, agent, graph, more);
+        }
+
+        /** The news has been told. */
+        Strand told() {
+            return news.isEmpty() ? this : new Strand(id, from, label, transcript, activity, busy, agent, graph,
+                    List.of());
         }
     }
 
@@ -436,10 +456,10 @@ record Doc(List<Strand> strands, String showing, Panes panes, Mind mind, String 
     Doc resumed(Conversation c) {
         List<Strand> next = new java.util.ArrayList<>();
         next.add(new Strand(MAIN, "", "Main", c.transcript(), "not started", false, info(c.agent()),
-                MapGraph.EMPTY));
+                MapGraph.EMPTY, c.news()));
         for (Conversation.Branch b : c.branches()) {
             next.add(new Strand(b.id(), b.from(), b.label(), b.transcript(), "not started", false, info(b.agent()),
-                    b.graph()));
+                    b.graph(), List.of()));
         }
         return new Doc(next, MAIN, panes, new Mind(c.graph(), c.positions(), c.mindTurn(), ""),
                 "Resumed: " + (c.title().isEmpty() ? "(untitled)" : c.title()),

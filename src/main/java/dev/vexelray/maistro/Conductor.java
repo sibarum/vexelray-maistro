@@ -11,6 +11,7 @@ import dev.vexelray.maistro.chat.Turn;
 import dev.vexelray.maistro.map.MapDelta;
 import dev.vexelray.maistro.map.MapGraph;
 import dev.vexelray.maistro.map.MapProtocol;
+import dev.vexelray.maistro.map.Merge;
 import dev.vexelray.maistro.map.Node;
 import sibarum.probe.Log;
 
@@ -166,6 +167,93 @@ final class Conductor implements AutoCloseable {
         return true;
     }
 
+    /**
+     * Merge branch {@code id} into the main strand: its staged map joins the map ({@link Merge}: a branch only adds,
+     * and an id it reused for something else is renamed), the main transcript gets a note saying what came in, and
+     * the main agent is told, with its next message, what the branch last said and what it added. Then the branch
+     * goes, as Abandon. Refused while the branch's agent is mid-turn.
+     *
+     * @return whether it was merged
+     */
+    boolean merge(String id) {
+        AtomicReference<Merge> merged = new AtomicReference<>();
+        model.change(d -> {
+            Optional<Doc.Strand> b = d.strand(id).filter(s -> !s.isMain());
+            if (b.isEmpty()) {
+                merged.set(null);
+                return d;
+            }
+            Doc.Strand s = b.get();
+            if (s.busy()) {
+                merged.set(null);
+                return d.withStatus("The branch is working. Interrupt it (Escape) or wait for its reply, then merge.");
+            }
+            Merge m = Merge.of(d.mind().graph(), s.graph(), id, d.mind().turn());
+            merged.set(m);
+            String note = mergeNote(s, m);
+            return d.withoutBranch(id)
+                    .withMind(mind -> m.isEmpty() ? mind : mind.with(m.graph()))
+                    .withStrand(Doc.MAIN, x -> x.withTranscript(t -> t.append(n -> Turn.note(n, note, false)))
+                            .toldNext(mergeNews(s, m)))
+                    .withStatus(note);
+        });
+        if (merged.get() == null) {
+            return false;
+        }
+        Lane l = lanes.remove(id);
+        if (l != null) {
+            l.close();
+        }
+        return true;
+    }
+
+    /** The longest stretch of a branch's last reply the main agent is told. */
+    static final int NEWS_REPLY_MAX = 1500;
+
+    /** What the main transcript says of a merge: {@code Merged the branch from X: +2 nodes, +1 links; ...}. */
+    static String mergeNote(Doc.Strand branch, Merge m) {
+        StringBuilder sb = new StringBuilder("Merged the branch from ").append(branch.label()).append(": ");
+        if (m.isEmpty()) {
+            sb.append("nothing new for the map");
+        } else {
+            sb.append('+').append(m.nodes()).append(m.nodes() == 1 ? " node" : " nodes")
+                    .append(", +").append(m.links()).append(m.links() == 1 ? " link" : " links");
+        }
+        m.renamed().forEach((was, now) -> sb.append("; ").append(was).append(" came in as ").append(now));
+        return sb.toString();
+    }
+
+    /**
+     * What the main agent is told of a merge, ahead of its next message: which node the branch started from, what it
+     * last said (cut to {@link #NEWS_REPLY_MAX}), and what it added to the map, as a {@code maistro-map} block. The
+     * branch's history is not passed on; that is what a branch is for.
+     */
+    static String mergeNews(Doc.Strand branch, Merge m) {
+        String last = "";
+        for (Turn t : branch.transcript().turns()) {
+            if (t.who() == Turn.Who.AGENT) {
+                last = t.text();
+            }
+        }
+        if (last.length() > NEWS_REPLY_MAX) {
+            last = last.substring(0, NEWS_REPLY_MAX - 1) + "…";
+        }
+        StringBuilder sb = new StringBuilder("A branch of this conversation, started at the map node \"")
+                .append(branch.label()).append("\" (").append(branch.from())
+                .append("), ran in a session of its own and has been merged back. ");
+        sb.append(last.isEmpty() ? "It said nothing." : "Its last reply:\n\n" + last);
+        if (!m.isEmpty()) {
+            sb.append("\n\nIt added to the map:\n\n").append(MapProtocol.render(m.added()));
+        }
+        if (!m.renamed().isEmpty()) {
+            sb.append("\nIds it used for something else on the map were renamed: ");
+            List<String> pairs = new ArrayList<>();
+            m.renamed().forEach((was, now) -> pairs.add(was + " -> " + now));
+            sb.append(String.join(", ", pairs)).append('.');
+        }
+        return sb.toString();
+    }
+
     /** Put strand {@code id} on screen. */
     void show(String id) {
         model.change(d -> d.showing(id));
@@ -272,10 +360,18 @@ final class Conductor implements AutoCloseable {
             update((d, s) -> {
                 Optional<Node> from = d.mind().anchorNode();
                 String body = from.map(n -> fromNode(d.mind().graph(), n, text)).orElse(text);
+                if (!s.news().isEmpty()) {
+                    body = String.join("\n\n", s.news()) + "\n\n" + body;
+                }
                 prompt.set(!s.isMain() && s.spoken() == 0 ? branchStart(s, body) : body);
-                List<String> chips = from.map(n -> List.of("from · " + n.shownLabel())).orElse(List.of());
+                List<String> chips = new ArrayList<>();
+                from.ifPresent(n -> chips.add("from · " + n.shownLabel()));
+                if (!s.news().isEmpty()) {
+                    int n = s.news().size();
+                    chips.add("told · " + n + (n == 1 ? " merged branch" : " merged branches"));
+                }
                 Doc next = d.withStrand(id, x -> x.withTranscript(t -> t.append(n -> Turn.human(n, text)
-                        .withChips(chips))).withActivity("thinking", true));
+                        .withChips(chips))).withActivity("thinking", true).told());
                 return s.isMain()
                         ? next.withMind(Doc.Mind::spoke).withMeta(m -> m.titled(text))
                         : next.withMind(Doc.Mind::unanchored);

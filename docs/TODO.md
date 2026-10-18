@@ -17,9 +17,6 @@ longer list this is drawn from.
       SDK's documented ones and have not been seen from this CLI yet.
 - [ ] Permissions, the rest: per-app trust (guide, gap 3), a reason typed with a Deny, and a view of the standing
       rules already set up (they live in Claude Code's settings files).
-- [ ] Merge a branch back (slice 2 of the forks proposal): apply its staged map to the main one, renaming an id
-      that already means something else as `id~<branch>`, with a chip saying so; then tell the main agent, on its
-      next message, the branch's last reply and what it added.
 - [ ] Ctrl+B is checked with the map focused; whether the composer, when it has the keyboard, lets the chord
       through is not.
 - [ ] Conversations, later: delete, rename, search, and Claude Code sessions started outside Maistro. A click on a

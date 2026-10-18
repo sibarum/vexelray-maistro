@@ -30,7 +30,7 @@ final class Actions {
         ui.conversation().onAnswer(conductor::answer);
         ui.conversation().onAlways(conductor::answerAlways);
         ui.conversation().onResume(this::resume);
-        ui.conversation().onStrands(conductor::show, conductor::abandon);
+        ui.conversation().onStrands(conductor::show, this::merge, conductor::abandon);
         ui.context().onBranch(this::branch);
     }
 
@@ -48,6 +48,13 @@ final class Actions {
         gui.shortcut(Key.N, this::newConversation, Modifier.CONTROL);
         gui.shortcut(Key.O, this::conversations, Modifier.CONTROL);
         gui.shortcut(Key.B, this::branch, Modifier.CONTROL);
+    }
+
+    /** Merge branch {@code id} into the main strand, or say why not. */
+    void merge(String id) {
+        if (!conductor.merge(id)) {
+            ui.alert();
+        }
     }
 
     /** Start a branch from the focused node, and put the keyboard in the composer to say its first thing. */

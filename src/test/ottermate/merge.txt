@@ -1,0 +1,27 @@
+await composer
+click composer
+type hello
+key ENTER
+await context.focus KV cache
+await status.agent idle
+click map.node.beta
+await context.focus Surprise score
+key CTRL+B
+await strand.b1
+click composer
+type what follows from it?
+key ENTER
+await status.agent idle
+settle
+click branch.merge
+await status.message Merged the branch from Surprise score
+settle
+find Merged
+shot target/merge-merged.png
+click composer
+type go on
+key ENTER
+await status.agent idle
+settle
+find told
+shot target/merge-told.png

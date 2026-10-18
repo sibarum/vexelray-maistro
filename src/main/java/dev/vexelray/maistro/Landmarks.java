@@ -64,6 +64,9 @@ final class Landmarks {
     /** Abandon, beside the strand buttons while a branch is on screen. */
     static final String BRANCH_ABANDON = "branch.abandon";
 
+    /** Merge into main, beside Abandon. */
+    static final String BRANCH_MERGE = "branch.merge";
+
     /** "Branch from here", in the context stream's Focus section while a node is focused. */
     static final String CONTEXT_BRANCH = "context.branch";
 

@@ -59,8 +59,17 @@ public final class ConversationCodec {
                 .put("transcript", transcript(c.transcript()))
                 .put("map", map(c.graph(), c.positions(), c.mindTurn()))
                 .put("branches", new JsonValue.Arr(branches))
+                .put("news", JsonValue.Arr.ofStrings(c.news()))
                 .build()
                 .toJson();
+    }
+
+    private static List<String> strings(JsonValue v) {
+        List<String> out = new ArrayList<>();
+        for (JsonValue s : v.items()) {
+            out.add(s.asString());
+        }
+        return out;
     }
 
     private static JsonValue agent(Conversation.Agent a) {
@@ -106,7 +115,7 @@ public final class ConversationCodec {
         }
         return new Conversation(id, v.get("title").asString(), v.get("started").asLong(0), v.get("saved").asLong(0),
                 agent(v.get("agent")), transcript(v.get("transcript")), graph(m), positions(m.get("positions")),
-                (int) m.get("turn").asLong(0), branches);
+                (int) m.get("turn").asLong(0), branches, strings(v.get("news")));
     }
 
     // ---- the transcript -----------------------------------------------------------------------------------------

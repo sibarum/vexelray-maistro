@@ -69,6 +69,7 @@ final class ConversationPane {
     private List<String> strandSays = List.of();
     private volatile String shownStrand = Doc.MAIN;
     private volatile Consumer<String> showStrand = id -> { };
+    private volatile Consumer<String> merge = id -> { };
     private volatile Consumer<String> abandon = id -> { };
 
     private ListView<Summary> list;
@@ -172,15 +173,19 @@ final class ConversationPane {
 
     /**
      * One button per strand over the transcript, the one on screen filled, a working one marked with a dot, and
-     * Abandon at the end while a branch is on screen. Hidden while there is only the main strand. Built once;
-     * {@link #showStrands} fills it.
+     * Merge and Abandon at the end while a branch is on screen. Hidden while there is only the main strand. Built
+     * once; {@link #showStrands} fills it.
      */
     private Node strandBar() {
         strandButtons = gui.row().gap(Type.TIGHT).alignItems(AlignItems.CENTER);
-        Button abandonButton = new Button(gui, "Abandon branch").kind(Button.Kind.GHOST)
+        Button mergeButton = new Button(gui, "Merge into main").kind(Button.Kind.SECONDARY)
+                .onPress(() -> merge.accept(shownStrand));
+        gui.landmark(Landmarks.BRANCH_MERGE, mergeButton.node());
+        Button abandonButton = new Button(gui, "Abandon").kind(Button.Kind.GHOST)
                 .onPress(() -> abandon.accept(shownStrand));
         gui.landmark(Landmarks.BRANCH_ABANDON, abandonButton.node());
-        abandonRow = abandonButton.node();
+        abandonRow = gui.row().gap(Type.TIGHT).alignItems(AlignItems.CENTER)
+                .children(mergeButton.node(), abandonButton.node());
         strands = gui.row()
                 .width(Length.FILL)
                 .padding(Length.dp(0), Type.GUTTER)
@@ -192,9 +197,10 @@ final class ConversationPane {
         return strands;
     }
 
-    /** Which strand is on screen, and what pressing a strand's button or Abandon does. */
-    void onStrands(Consumer<String> show, Consumer<String> abandon) {
+    /** What pressing a strand's button, Merge or Abandon does; the last two are handed the branch on screen. */
+    void onStrands(Consumer<String> show, Consumer<String> merge, Consumer<String> abandon) {
         this.showStrand = show;
+        this.merge = merge;
         this.abandon = abandon;
     }
 

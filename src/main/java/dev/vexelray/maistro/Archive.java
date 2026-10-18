@@ -143,7 +143,7 @@ final class Archive implements AutoCloseable {
         Doc.Strand main = d.main();
         return new Conversation(d.meta().id(), d.meta().title(), d.meta().started(), System.currentTimeMillis(),
                 agent(main.agent()), main.transcript(), d.mind().graph(), d.mind().positions(), d.mind().turn(),
-                branches);
+                branches, main.news());
     }
 
     private static Conversation.Agent agent(Doc.AgentInfo a) {
