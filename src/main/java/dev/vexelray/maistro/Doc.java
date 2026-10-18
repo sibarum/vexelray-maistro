@@ -1,120 +1,170 @@
 package dev.vexelray.maistro;
 
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.List;
+import dev.vexelray.maistro.chat.Transcript;
+import dev.vexelray.maistro.map.Layout;
+import dev.vexelray.maistro.map.MapGraph;
+
+import java.util.Map;
 import java.util.function.UnaryOperator;
 
 /**
- * Everything the application knows about its session, in one immutable value: which files are open, in what
- * order, which one is in front, which have unsaved work, which folder the navigator shows, and the last thing the
+ * Everything Maistro knows about its session, in one immutable value: the conversation, what the agent is doing
+ * right now, which panes are on show, what the agent's process has told us about itself, and the last thing the
  * status line was told.
  *
  * <h2>Why a record, and why one</h2>
  *
- * <p>A snapshot rather than a set of fields somebody mutates. The title bar, the status line, the close gate and
- * the remembered session all read this from different threads while handlers write it from workers, and a record
- * handed over by a single reference swap is the whole synchronisation story: there is no instant at which a reader
- * sees half an edit. Add fields here rather than adding state elsewhere.
+ * <p>A snapshot rather than a set of fields somebody mutates. The agent's reader thread streams into it, handlers
+ * write it from workers, and the window, the status line and the remembered session read it, and a record handed
+ * over by a single reference swap is the whole synchronisation story: there is no instant at which a reader sees
+ * half an edit. Add fields here rather than adding state elsewhere.
  *
- * <h2>What it does not hold is the text</h2>
- *
- * <p>Each document's text is already one versioned value — the {@code State<Document>} inside its
- * {@code TextField} — so copying it here would be a second place it lives, and the two would disagree for a frame
- * every keystroke. This is the part nothing else owns: the shape of the session.
- *
- * <p>A tab is named by an {@code id}, not an index. An index is a fact about the tab bar at one instant, and a
- * close landing between a read and a write turns it into the neighbour's.
+ * @param transcript the conversation so far
+ * @param activity   what the agent is doing, in a few words ({@code idle}, {@code thinking}, {@code running Bash})
+ * @param busy       the agent has a turn in progress, so a second message waits and Escape interrupts
+ * @param panes      which panes are on show
+ * @param agent      what the agent's process said about itself
+ * @param mind       the mind map
+ * @param status     the last thing the status line was told
  */
-record Doc(List<Entry> tabs, long active, Path folder, String status) {
+record Doc(Transcript transcript, String activity, boolean busy, Panes panes, AgentInfo agent, Mind mind,
+           String status) {
 
-    /** No tab is in front. */
-    static final long NONE = -1;
+    /** Which of the three panes are on show. Each toggles on its own; the map takes whatever room is left. */
+    record Panes(boolean conversation, boolean map, boolean context) {
+
+        static final Panes ALL = new Panes(true, true, true);
+
+        Panes toggle(Pane pane) {
+            return pane.toggle(this);
+        }
+
+        boolean shows(Pane pane) {
+            return pane.shown(this);
+        }
+    }
+
+    /** A pane, with how to read and flip it on a {@link Panes}: a method on the constant rather than a switch. */
+    enum Pane {
+        CONVERSATION {
+            @Override
+            Panes toggle(Panes p) {
+                return new Panes(!p.conversation(), p.map(), p.context());
+            }
+
+            @Override
+            boolean shown(Panes p) {
+                return p.conversation();
+            }
+        },
+        MAP {
+            @Override
+            Panes toggle(Panes p) {
+                return new Panes(p.conversation(), !p.map(), p.context());
+            }
+
+            @Override
+            boolean shown(Panes p) {
+                return p.map();
+            }
+        },
+        CONTEXT {
+            @Override
+            Panes toggle(Panes p) {
+                return new Panes(p.conversation(), p.map(), !p.context());
+            }
+
+            @Override
+            boolean shown(Panes p) {
+                return p.context();
+            }
+        };
+
+        abstract Panes toggle(Panes p);
+
+        abstract boolean shown(Panes p);
+    }
 
     /**
-     * One open file.
-     *
-     * @param id    stable for the life of the tab
-     * @param path  where it is on disk; every document here has one
-     * @param dirty whether it differs from what was last loaded or saved
+     * What the agent's process has said about itself: the init line's session, model and folder, and the running
+     * totals from each turn's result. Empty until the agent first speaks.
      */
-    record Entry(long id, Path path, boolean dirty) {
+    record AgentInfo(String sessionId, String model, String cwd, double costUsd, int turns, long inputTokens,
+                     long outputTokens) {
 
-        /** The tab's label: the file name, with a bullet in front while it is unsaved. */
-        String title() {
-            String name = String.valueOf(path.getFileName());
-            return dirty ? "• " + name : name;
+        static final AgentInfo NONE = new AgentInfo("", "", "", 0, 0, 0, 0);
+
+        AgentInfo started(String id, String modelName, String folder) {
+            return new AgentInfo(id, modelName, folder, costUsd, turns, inputTokens, outputTokens);
         }
 
-        Entry withDirty(boolean value) {
-            return new Entry(id, path, value);
+        AgentInfo plus(double cost, int moreTurns, long in, long out) {
+            return new AgentInfo(sessionId, model, cwd, costUsd + cost, turns + moreTurns, inputTokens + in,
+                    outputTokens + out);
         }
     }
 
-    Doc {
-        tabs = List.copyOf(tabs);
+
+    /**
+     * The mind map: the concept graph the agent's replies grow, where each node sits, and how many times the human
+     * has spoken (the turn a node is stamped with, so the last turn's nodes can be told apart).
+     *
+     * <p>The positions are kept beside the graph rather than worked out by the view, because a layout is only stable
+     * against the one before it ({@link Layout#next}), and that history belongs to the session, not to the widgets.
+     */
+    record Mind(MapGraph graph, Map<String, Layout.Point> positions, int turn) {
+
+        static final Mind EMPTY = new Mind(MapGraph.EMPTY, Map.of(), 0);
+
+        /** The width of one character of a node's label, and its padding, in layout units. */
+        static final double CHAR = 7.5;
+        static final double PAD = 24;
+        static final double HEIGHT = 30;
+
+        Mind {
+            positions = Map.copyOf(positions);
+        }
+
+        /** A node's box in layout units: its label's rough width. The view draws at the same estimate. */
+        static Layout.Size size(dev.vexelray.maistro.map.Node node) {
+            return new Layout.Size(node.shownLabel().length() * CHAR + PAD, HEIGHT);
+        }
+
+        Mind spoke() {
+            return new Mind(graph, positions, turn + 1);
+        }
+
+        /** The graph changed: lay it out against where everything was. Pure, so it may run inside a commit. */
+        Mind with(MapGraph next) {
+            return new Mind(next, Layout.next(positions, next, Mind::size), turn);
+        }
     }
 
-    /** Nothing open. */
     static Doc initial() {
-        return new Doc(List.of(), NONE, null, "");
+        return new Doc(Transcript.empty(), "not started", false, Panes.ALL, AgentInfo.NONE, Mind.EMPTY, "");
     }
 
-    /** The entry with {@code id}, or null if it has gone. */
-    Entry entry(long id) {
-        for (Entry e : tabs) {
-            if (e.id() == id) {
-                return e;
-            }
-        }
-        return null;
+    Doc withTranscript(UnaryOperator<Transcript> change) {
+        return new Doc(change.apply(transcript), activity, busy, panes, agent, mind, status);
     }
 
-    /** The document in front, or null. */
-    Entry front() {
-        return entry(active);
+    Doc withActivity(String value, boolean isBusy) {
+        return new Doc(transcript, value, isBusy, panes, agent, mind, status);
     }
 
-    /** Every document with unsaved work, in tab order. */
-    List<Entry> unsaved() {
-        return tabs.stream().filter(Entry::dirty).toList();
+    Doc withPanes(Panes value) {
+        return new Doc(transcript, activity, busy, value, agent, mind, status);
     }
 
-    /** Every open file, in tab order — what a session remembers. */
-    List<Path> files() {
-        return tabs.stream().map(Entry::path).toList();
+    Doc withAgent(UnaryOperator<AgentInfo> change) {
+        return new Doc(transcript, activity, busy, panes, change.apply(agent), mind, status);
     }
 
-    Doc withTab(Entry entry) {
-        List<Entry> next = new ArrayList<>(tabs);
-        next.add(entry);
-        return new Doc(next, active, folder, status);
-    }
-
-    Doc without(long id) {
-        List<Entry> next = new ArrayList<>(tabs);
-        next.removeIf(e -> e.id() == id);
-        return new Doc(next, active == id ? NONE : active, folder, status);
-    }
-
-    /** Change one entry, whatever it currently is. A no-op on one that has gone. */
-    Doc withEntry(long id, UnaryOperator<Entry> change) {
-        List<Entry> next = new ArrayList<>(tabs.size());
-        for (Entry e : tabs) {
-            next.add(e.id() == id ? change.apply(e) : e);
-        }
-        return new Doc(next, active, folder, status);
-    }
-
-    Doc withActive(long id) {
-        return new Doc(tabs, id, folder, status);
-    }
-
-    Doc withFolder(Path value) {
-        return new Doc(tabs, active, value, status);
+    Doc withMind(UnaryOperator<Mind> change) {
+        return new Doc(transcript, activity, busy, panes, agent, change.apply(mind), status);
     }
 
     Doc withStatus(String value) {
-        return new Doc(tabs, active, folder, value);
+        return new Doc(transcript, activity, busy, panes, agent, mind, value);
     }
 }

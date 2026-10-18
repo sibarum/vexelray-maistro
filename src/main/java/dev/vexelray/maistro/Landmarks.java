@@ -10,29 +10,35 @@ package dev.vexelray.maistro;
  *
  * <p>Where you can, carry <em>state in the accessible name</em>. {@code await <landmark> <text>} is how a driver
  * waits for the application to be ready, and it needs no hook when readiness is declared somewhere the read-model
- * can already see. {@link #STATUS_FILE} works that way: its name is the front tab's title, dot and all, so
- * {@code await status.file notes.md} waits for a file to open and {@code await status.file •} for it to go
- * unsaved.
+ * can already see. {@link #STATUS_AGENT} works that way: it says what the agent is doing, so
+ * {@code await status.agent idle} waits for a reply to finish.
  */
 final class Landmarks {
 
-    /** The tab bar and its pages. */
-    static final String TABS = "tabs";
+    /** The icon rail, and its three pane toggles. */
+    static final String RAIL = "rail";
+    static final String RAIL_CONVERSATION = "rail.conversation";
+    static final String RAIL_MAP = "rail.map";
+    static final String RAIL_CONTEXT = "rail.context";
 
-    /** What the editor area shows when no file is open. */
-    static final String EMPTY = "empty";
+    /** The conversation pane, its transcript, and the composer under it. */
+    static final String CONVERSATION = "conversation";
+    static final String TRANSCRIPT = "transcript";
+    static final String COMPOSER = "composer";
+    static final String SEND = "send";
 
-    /** The navigator's path bar: type a folder to show it, a file to open it, a new name to create it. */
-    static final String PATH = "path";
+    /** The mind map, the main stage. */
+    static final String MAP = "map";
 
-    /** The navigator's tree. */
-    static final String TREE = "navigator";
+    /** The context stream, and its session readouts. */
+    static final String CONTEXT = "context";
+    static final String CONTEXT_SESSION = "context.session";
 
-    /** The status line, and its three slots. */
+    /** The status line, and its slots. */
     static final String STATUS = "status";
-    static final String STATUS_FILE = "status.file";
+    static final String STATUS_AGENT = "status.agent";
     static final String STATUS_MESSAGE = "status.message";
-    static final String STATUS_POSITION = "status.position";
+    static final String STATUS_MODEL = "status.model";
 
     private Landmarks() {
     }

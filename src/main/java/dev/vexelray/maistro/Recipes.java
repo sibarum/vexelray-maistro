@@ -2,9 +2,8 @@ package dev.vexelray.maistro;
 
 import dev.vexelray.framework.api.Configuration;
 import dev.vexelray.framework.api.Provides;
-import dev.vexelray.framework.core.Launch;
+import dev.vexelray.framework.api.Setting;
 import dev.vexelray.framework.shell.Appearance;
-import dev.vexelray.framework.shell.Dialogs;
 import dev.vexelray.framework.shell.Shell;
 import dev.vexelray.gui.core.Gui;
 import dev.vexelray.gui.core.app.Settings;
@@ -14,8 +13,6 @@ import dev.vexelray.gui.widget.TitleBar;
 import sibarum.tactroller.api.Key;
 import sibarum.tactroller.api.Modifier;
 
-import java.nio.file.Path;
-import java.util.List;
 
 /**
  * What this application builds — one recipe per part — and nothing about when.
@@ -70,7 +67,7 @@ final class Recipes {
 
     /**
      * The window's contents. Needs the {@code Gui}, its clock and its title bar, and no window — so a test can build
-     * the real tree headless ({@code VexelApplication.tree}), which {@code EditorTest} does.
+     * the real tree headless ({@code VexelApplication.tree}), which {@code UiTest} does.
      *
      * <p>The clock is for motion: {@link Motion} makes the ramps every widget here animates with. Every change to the
      * session redraws what is derived from it, on the committing thread — a worker, because every handler is — and
@@ -88,32 +85,46 @@ final class Recipes {
     }
 
     /**
-     * Every command, and the chords for them. Its questions go to the framework's {@code Dialogs}, which are there
-     * from the first phase: asked before the window exists, a question waits for it rather than throwing.
+     * The agent: Claude Code, run as a child process in its streaming mode, and what turns its events into changes
+     * to the session. Built with the model and nothing graphical, so it exists before the tree; it starts no process
+     * until the first message is sent, so a tree built headless for a test never launches one.
+     *
+     * <p>Each launch option is a setting, so {@code --claude=C:/path/claude.exe}, {@code --model=opus} or
+     * {@code --permissionMode=acceptEdits} on the command line changes it for one run. An empty {@code claude}
+     * looks for the CLI on {@code PATH} and then in the Claude desktop app's own copy.
      */
     @Provides
-    Actions actions(Gui gui, Model model, Ui ui, Dialogs dialogs) {
-        Actions actions = new Actions(gui, model, ui, dialogs);
+    Conductor conductor(Model model,
+                        @Setting(value = "claude", def = "") String claude,
+                        @Setting(value = "model", def = "") String agentModel,
+                        @Setting(value = "permissionMode", def = "default") String permissionMode,
+                        @Setting(value = "cwd", def = "") String cwd) {
+        return new Conductor(model, new Conductor.Launch(claude, agentModel, permissionMode, cwd));
+    }
+
+    /**
+     * Every command, and the chords for them.
+     */
+    @Provides
+    Actions actions(Gui gui, Model model, Ui ui, Conductor conductor) {
+        Actions actions = new Actions(gui, model, ui, conductor);
         actions.shortcuts();
         return actions;
     }
 
     /**
-     * Arm the close gate and bring back last time's session.
+     * Bring back last time's panes, and put the keyboard in the composer.
      *
-     * <p>Takes the {@code Shell} to be last: restoring the session opens files and writes settings, which a tree built
-     * headless for a test must not, and the {@code Shell} is the framework's last-phase value. The gate is the main
-     * window's, and a window has one: a second is refused, because the one it would replace is as likely as not the
-     * one that knew about the unsaved files.
+     * <p>Takes the {@code Shell} to be last: restoring writes settings, which a tree built headless for a test must
+     * not, and the {@code Shell} is the framework's last-phase value.
      *
-     * <p>Neither half produces anything, and a provider has to return something that is neither {@code void} nor a
-     * record — hence {@link Started}, which marks that this ran and is otherwise empty.
+     * <p>A provider has to return something that is neither {@code void} nor a record, hence {@link Started}, which
+     * marks that this ran and is otherwise empty.
      */
     @Provides
-    Started start(Shell shell, Actions actions, Session session, Launch launch, Gui gui) {
-        shell.windows().main().onClose(actions::guardClose);
-        List<Path> paths = launch.rest().stream().map(Path::of).toList();
-        session.restore(actions, paths, gui.offload());
+    Started start(Shell shell, Actions actions, Session session, Ui ui) {
+        session.restore();
+        ui.conversation().focusComposer();
         return new Started();
     }
 

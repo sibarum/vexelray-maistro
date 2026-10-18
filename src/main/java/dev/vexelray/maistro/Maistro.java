@@ -14,16 +14,15 @@ import dev.vexelray.framework.shell.VexelApplication;
  * its wakes and its pacing, installing the dialogs, parsing the command line and closing everything in the right
  * order are all done for you.
  *
- * <p>What this application builds — a text editor with tabs and a file navigator — is in {@link Recipes}, one
+ * <p>What this application builds — a Claude Code client with a mind map — is in {@link Recipes}, one
  * method per part. {@code MaistroAppWiring}, which builds those parts in order, is generated from them and from
  * the {@code @VexelApp} on {@code MaistroApp} while the project compiles — so the facts below are stated once,
  * here, and the wiring reads them.
  *
  * <pre>
- * Maistro                     the editor, on the folder it was last showing (or the working directory)
- * Maistro &lt;path&gt;...          open these: a folder becomes the navigator's root, a file a tab
+ * Maistro                     a new conversation, with the panes last shown
  * Maistro &lt;frames&gt;            run a fixed number of frames and quit (a script, not a session)
- * Maistro --key=value         override a setting for this launch
+ * Maistro --key=value         override a setting for this launch: --claude, --model, --permissionMode, --cwd
  * </pre>
  *
  * <p>A misspelled flag is refused by name with the alternatives listed, rather than a stack trace before any
@@ -56,14 +55,14 @@ public final class Maistro {
     static final String ICON = "/vexelray-maistro.ico";
 
     /**
-     * The smallest this UI is still coherent at, in root ems — a floor, not the design size: a navigator and a
-     * document side by side, each still wide enough to read.
+     * The smallest this UI is still coherent at, in root ems — a floor, not the design size: the rail, the
+     * conversation and the context stream at their widths ({@link Type}), and a sliver of map between them.
      *
      * <p>Named here rather than written at each use because it is read from two places that have to agree:
      * {@link Recipes#look} declares it to the framework, and a screenshot at exactly the minimum
-     * ({@code ottermate --size 36emx20em shot}) is the picture that shows a panel outgrowing it.
+     * ({@code ottermate --size 66emx20em shot}) is the picture that shows a panel outgrowing it.
      */
-    static final float MIN_W_EM = 36;
+    static final float MIN_W_EM = 66;
     static final float MIN_H_EM = 20;
 
     /**

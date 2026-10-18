@@ -2,10 +2,11 @@
 
 Claude Code with hands: an agent that drives the VexelRay apps.
 
-A VexelRay desktop application, generated from the `vexel-desktop` template: a small text editor with tabs, a file
-navigator and Markdown in colour. It is the reference implementation of this stack, so every seam the framework
-offers is wired in the tree you are reading — and it is a working editor, so it is also something to change into
-whatever you are actually building.
+A VexelRay desktop client for Claude Code. It runs the Claude Code CLI as a child process in its streaming mode and
+shows the conversation beside a mind map that the agent's replies grow, with the session's machinery (model, cost,
+tokens) in a context stream on the right. The layout, palette and ideas come from the design canvas, summarised in
+[docs/gui-design-guide.md](docs/gui-design-guide.md). It was generated from the `vexel-desktop` template; the editor
+that template starts as is gone.
 
 ## Run it
 
@@ -14,14 +15,18 @@ mvn compile exec:exec
 ```
 
 `exec:exec` rather than `exec:java`, so native access can be enabled for Panama FFM. The window comes up where you
-last left it, at 1440x900 the first time, with the folder and the files you last had open. The first time,
-the navigator shows the working directory.
+last left it, at 1440x900 the first time, with the panes you last had up.
+
+Maistro needs a Claude Code CLI that is logged in. It looks for `claude.exe` on `PATH`, then for the copy the Claude
+desktop app keeps under `%APPDATA%\Claude\claude-code\`, then in `~/.local/bin`. That bundled copy is not logged in
+on its own: run it once with `/login`, or name another with `--claude`.
 
 ```
-mvn compile exec:exec "-Dapp.args=C:/notes"               # open a folder (or files) named on the command line
-mvn compile exec:exec -Dapp.args=120                      # 120 frames and quit
-mvn compile exec:exec -Dautomation=0                      # a driving socket on a free port (see Taking a screenshot)
-mvn test                                                  # the model, the file policy, Markdown, the real tree headless
+mvn compile exec:exec "-Dapp.args=--claude=C:/path/claude.exe"   # which CLI to run
+mvn compile exec:exec "-Dapp.args=--model=sonnet --cwd=C:/work"  # its model, and the folder it works in
+mvn compile exec:exec "-Dapp.args=--permissionMode=acceptEdits"  # default is "default": anything needing approval is denied
+mvn compile exec:exec -Dautomation=0                             # a driving socket on a free port (see Taking a screenshot)
+mvn test                                                         # the agent protocol, the map, the real tree headless
 ```
 
 ## A native executable
@@ -70,21 +75,17 @@ groups the button with other Java programs, and pinning it pins Java. The native
 
 | Keys | Does |
 | --- | --- |
-| Ctrl+L | the path bar: type a folder to show it, a file to open it, a new name to create it; Enter goes |
-| Ctrl+S | save |
-| Ctrl+W | close the tab (asks if it is unsaved) |
-| Ctrl+Tab, Ctrl+PageDown / Ctrl+Shift+Tab, Ctrl+PageUp | next / previous tab |
-| Ctrl+Shift+E | put the keyboard in the navigator |
-| Ctrl+F | find in the file (Enter / Shift+Enter step, Escape closes) |
-| Ctrl+Z / Ctrl+Y | undo / redo |
+| Enter (in the composer) | send |
+| Escape | interrupt the agent's turn |
+| Ctrl+L | put the keyboard in the composer |
+| Ctrl+1 / Ctrl+2 / Ctrl+3 | show or hide the conversation, the mind map, the context stream |
 | Ctrl+= / Ctrl+- / Ctrl+0 | zoom |
 
-Selecting a file in the navigator opens it — a click, or walking the tree with the arrow keys, which keep the
-keyboard in the tree. A tab's menu has Save, Close, Close others, Close all and Reveal in navigator. A bullet in
-front of a tab's name means unsaved changes; closing anything unsaved asks first, and so does quitting.
-
-There is no file dialog, by choice: the path bar is the whole of "open", and it works the same in a test as in use. The
-framework brings native pickers (`Dialogs.openFile`, `openFolder`, `saveFile`) for a project that wants them.
+The first message starts Claude Code; it stays up for the conversation, and if its process ends, the next message
+starts it again with `--resume`, so the conversation carries on. Each tool the agent runs is a turn of its own,
+in teal, that ends with the first line of its result. The agent is asked (in its system prompt) to end a reply with
+a `maistro-map` block; Maistro strips it from the transcript, adds what it names to the map, and puts a chip under
+the reply saying what changed. The map's nodes from the last turn are outlined in amber, and the focus is filled.
 
 ## How it is put together
 
@@ -93,14 +94,16 @@ Read these in this order.
 | File | What belongs in it |
 | --- | --- |
 | `Recipes.java` | **what this application builds.** One `@Provides` method per part; `MaistroAppWiring`, which builds them in order, is generated from it while the project compiles. A part's phase is the latest phase of anything it takes, so there is none to declare. New parts go here. |
-| `Doc.java`, `Model.java` | the shape of the session — which files, which in front, which unsaved, which folder — as one immutable value, changed only by functions of the current value, committed through atchung's `State`. |
-| `Ui.java` | the window. Holds no state; `show(Doc)` writes everything derived from the session. |
-| `Workspace.java`, `Buffer.java` | the tab bar and one `Buffer` per tab: a `TextField`, its spans, its save bookkeeping. |
-| `Navigator.java`, `FolderSource.java` | the path bar and the file tree, over the disk, read lazily off the frame loop. |
-| `Actions.java` | every command, the questions some of them ask, and the close gate. |
-| `Session.java` | what comes back next time, in the framework's one settings store. |
+| `Doc.java`, `Model.java` | the session: the transcript, what the agent is doing, which panes are up, the agent's own readouts and the mind map, as one immutable value changed only by functions of the current value, committed through atchung's `State`. |
+| `Conductor.java` | the agent's side: one Claude Code process, and each of its events turned into one commit to the model. |
+| `Ui.java` and its panes | the window: `PaneRail`, `ConversationPane`, `MapPane`, `ContextPane`. Hold no state; `show(Doc)` writes everything derived from the session. |
+| `Actions.java` | every command and its chord. |
+| `Session.java` | what comes back next time (the panes), in the framework's one settings store. |
 | `Motion.java` | the one tempo every widget moves at, on the framework's clock. |
-| `text/TextFile.java`, `text/Markdown.java` | **code with no `Gui` in it**, in a sub-package with public types: the policy between bytes and text, and Markdown as spans. Testable in milliseconds; this is where a real application's non-GUI code goes. |
+| `agent/` | **no `Gui`:** finding the CLI, its stream-json protocol as typed events, a strict JSON reader, the process. |
+| `map/` | **no `Gui`:** the concept graph as a value, the `maistro-map` block format and its parser, a deterministic layout that keeps old nodes still. |
+| `chat/` | **no `Gui`:** the transcript and its turns. |
+| `text/Markdown.java` | **no `Gui`:** Markdown as spans, for the agent's replies. |
 
 `Maistro.java` is the entry point and the constants, and nothing else. The application edge — input, the
 clipboard, window memory, the clock, the frame loop with its wakes and its pacing, the dialogs, the command line and
@@ -125,25 +128,23 @@ Open `target/generated-sources/annotations/.../MaistroAppWiring.java` after a bu
 
 ### Threading, in one paragraph
 
-The GUI loop runs on its own thread. Every handler — a click, a key, a submitted path — runs on a worker, and every
-read and write of a file runs on the offload lane, so a slow disk is never a frozen window. Workers meet at `Model`,
-whose compare-and-set puts concurrent changes in an order. A listener registered with `Model.onChange` fires on the
-committing thread; writing a node's props from there is correct, because a prop written off the GUI thread is applied
-by the next drain. Two rules keep it deadlock-free, and both are written on `Workspace`: nothing commits to the model
-while holding the workspace's lock, and nothing a model listener reaches takes it. Nothing inside the frame loop
-reads the model.
+The GUI loop runs on its own thread. Every handler (a click, a key, a submitted message) runs on a worker; the first
+send starts Claude Code there, off the frame loop. The agent's events arrive on the session's own reader thread, one
+at a time and in order. Workers and the reader meet at `Model`, whose compare-and-set puts concurrent changes in an
+order. A listener registered with `Model.onChange` fires on the committing thread; writing a node's props from there
+is correct, because a prop written off the GUI thread is applied by the next drain. Nothing commits to the model
+while holding a lock a model listener takes, and nothing inside the frame loop reads the model.
 
 ### Spans
 
-`Markdown.spans` is a pure function from text to `Span`s — foreground, background, underline — and `Buffer` runs it
-on a worker after each edit and hands the result to the field. The text is never changed; the field draws the
-colours and moves each span with its text as you type. A `.txt` file gets none.
+`Markdown.spans` is a pure function from text to `Span`s (foreground, background, underline); the conversation pane
+hands an agent reply's spans to its text node each time the reply grows.
 
 ### Motion
 
-The widgets animate only when handed a ramp, and without one they cut — so leaving the clock out costs no error,
-only a stiffer window. `Motion` makes the ramps from the framework's clock: the tabs slide, folders open, and a cue
-rings a tab you asked to open that was already open, or the status line when something was refused.
+The widgets animate only when handed a ramp, and without one they cut, so leaving the clock out costs no error,
+only a stiffer window. `Motion` makes the ramps from the framework's clock; today only the status line's alert cue
+uses them.
 
 ## The stack
 
@@ -174,11 +175,11 @@ Say what the picture is *of* with options, and `ottermate` sets it first and sto
 
 ```
 ottermate --zoom 1.5 --dpi 2 --size 1600x900 shot big.png --launch ...   # pixels
-ottermate --size 36emx20em shot smallest.png --launch ...                # the minimum, in em
+ottermate --size 66emx20em shot smallest.png --launch ...                # the minimum, in em
 ```
 
-The landmarks in `Landmarks.java` are the names a script uses: `await status.file notes.md` waits for a file to be in
-front, and `await path <folder>` for the navigator to be showing one. `ottermate help` lists every verb.
+The landmarks in `Landmarks.java` are the names a script uses: `await status.agent idle` waits for a reply to
+finish, and `click composer` then `type ...` and `key ENTER` sends one. `ottermate help` lists every verb.
 
 ## Logging
 

@@ -1,9 +1,11 @@
 # Working in Maistro
 
-Maistro is a VexelRay desktop application, generated from `vexelray-framework`'s `vexel-desktop` template. It
-started as the template's reference application, a small tabbed text editor with a file navigator, and is being
-turned into something else. [README.md](README.md) is the tour: read its *How it is put together* section before
-changing anything, and `Recipes.java` before adding a part.
+Maistro is Claude Code with hands: a VexelRay desktop client that runs the Claude Code CLI as a child process
+(`agent/`, its stream-json protocol), shows the conversation beside a mind map the agent's replies grow (`map/`),
+and will drive the other VexelRay applications through `ottermate`. The design is
+[docs/gui-design-guide.md](docs/gui-design-guide.md). It was generated from `vexelray-framework`'s `vexel-desktop`
+template, and the editor that template starts as has been removed. [README.md](README.md) is the tour: read its
+*How it is put together* section before changing anything, and `Recipes.java` before adding a part.
 
 ## Where things are
 
@@ -31,9 +33,8 @@ them even when a shortcut looks harmless:
   a GraalVM native image, and the framework's wiring is generated at compile time so that nothing needs reflection.
 - **Nothing in the frame loop allocates, logs or blocks.** No disk, no network, no locks there.
 - **Vulkan, the window and present stay on the main thread.** Handlers run on workers, and disk work goes to the
-  offload lane. README's *Threading, in one paragraph* is the whole model, and its two lock rules are written on
-  `Workspace`: nothing commits to the model while holding the workspace lock, and nothing reached from a model
-  listener takes it.
+  offload lane. README's *Threading, in one paragraph* is the whole model: nothing commits to the model while
+  holding a lock that anything reached from a model listener takes.
 - **All input comes through tactroller.** No polling the OS keyboard, and no native listener of your own.
 - **Log through `sibarum.probe.Log`**, as `Log.of("vexelray-maistro.<area>")`. stdout is for lines another program parses
   (`automation: localhost:<port>`), and for nothing else, including diagnostics.

@@ -19,7 +19,7 @@ import java.util.Locale;
  * background behind code, an underline under a link's text.
  *
  * <p>A pure function of the text: no {@code Gui}, no field, no thread. That is what makes it testable as a list of
- * ranges, and what lets {@code Buffer} run it on a worker and hand the result to the field in one call.
+ * ranges, and what lets the conversation pane recompute it as a reply streams in.
  *
  * <h2>How much Markdown</h2>
  *

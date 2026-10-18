@@ -3,7 +3,6 @@ package dev.vexelray.maistro;
 import sibarum.atchung.Committer;
 import sibarum.atchung.State;
 
-import java.nio.file.Path;
 import java.util.function.Consumer;
 import java.util.function.UnaryOperator;
 
@@ -13,7 +12,7 @@ import java.util.function.UnaryOperator;
  * <h2>Relative edits, not absolute writes</h2>
  *
  * <p>Every change here is a <em>function applied to whatever the current value turns out to be</em>, committed
- * through {@link State}. A tab closing on one worker and a document going dirty on another both land, in some
+ * through {@link State}. A streamed delta from the agent and a message the human sends both land, in some
  * order, and neither is lost. The alternative — read the value, compute a whole new one, write it back — produces
  * something perfectly coherent with one change missing whenever two handlers overlap, and nothing reports it.
  *
@@ -23,8 +22,7 @@ import java.util.function.UnaryOperator;
  * <h2>Handlers run on workers; this is the serialisation point</h2>
  *
  * <p>Nothing else in this application needs a lock for the session's shape, and if something starts to, that is
- * the signal that state has escaped this class. ({@link Workspace} has a lock, and it guards the widgets' tab
- * order, not this.)
+ * the signal that state has escaped this class.
  */
 final class Model {
 
@@ -49,24 +47,9 @@ final class Model {
         state.commit(edit, change);
     }
 
-    void opened(Doc.Entry entry) {
-        change(d -> d.withTab(entry).withActive(entry.id()));
-    }
-
-    void closed(long id) {
-        change(d -> d.without(id));
-    }
-
-    void front(long id) {
-        change(d -> d.entry(id) == null ? d : d.withActive(id));
-    }
-
-    void dirty(long id, boolean dirty) {
-        change(d -> d.withEntry(id, e -> e.withDirty(dirty)));
-    }
-
-    void folder(Path folder) {
-        change(d -> d.withFolder(folder));
+    /** Toggle one pane. */
+    void toggle(Doc.Pane pane) {
+        change(d -> d.withPanes(d.panes().toggle(pane)));
     }
 
     /** Say something on the status line. */
@@ -84,7 +67,7 @@ final class Model {
      *
      * <p><b>It serialises by making a committer wait</b> for any delivery already running on another thread. So
      * never commit here while holding a lock the listener also takes: that is two threads each waiting for the
-     * other, with nothing thrown. {@link Workspace} is written around exactly that rule.
+     * other, with nothing thrown.
      *
      * <p>And the order it keeps is among its own deliveries only. A listener that is also called directly, from
      * somewhere else, can be overtaken by an older delivery; read {@link #doc()} inside it rather than trusting the

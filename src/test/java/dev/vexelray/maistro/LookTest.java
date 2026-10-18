@@ -4,6 +4,7 @@ import dev.vexelray.canvas.Color;
 import dev.vexelray.gui.core.style.Role;
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -14,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * one anchor moved by a tenth changes every surface and every shade of text at once, and nothing on screen
  * says which change did it. These are the checks that would have caught it.
  *
- * <p>When this application gets a real design, the useful version of this test is the one that <b>pins the gap
+ * <p>Since the design canvas, it also <b>pins the gap
  * between the design and the construction</b> -- assert each authored colour against what the palette derives,
  * with the difference written down. A gap that is measured is a known quantity; a gap that is absorbed is a
  * surprise waiting for a review.
@@ -51,6 +52,25 @@ class LookTest {
     void theAccentIsNotTheInk() {
         assertNotEquals(Look.THEME.color(Role.INK), Look.THEME.color(Role.ACCENT),
                 "the accent should be a colour, not the text shade");
+    }
+
+    /** The gap between the canvas and the construction, pinned: the authored colours the ladder is meant to hit. */
+    @Test
+    void theLadderLandsOnTheCanvasColours() {
+        assertNear(0x0F1316, Look.THEME.color(Role.PAGE), "the stage");
+        assertNear(0x12181B, Look.THEME.color(Role.PANEL), "the panel");
+        assertNear(0xE6E1D6, Look.THEME.color(Role.INK), "the text");
+        assertNear(0xF0A93B, Look.THEME.color(Role.ACCENT), "the amber");
+        assertNear(0x222C31, Look.RULE, "the rule");
+        assertNear(0x5CC2B5, Look.SETTLED, "the teal");
+    }
+
+    /** Within two steps of 255 on every channel. */
+    private static void assertNear(int rgb, Color c, String what) {
+        float tolerance = 2.5f / 255f;
+        assertEquals((rgb >> 16 & 255) / 255f, c.r(), tolerance, what + " (red)");
+        assertEquals((rgb >> 8 & 255) / 255f, c.g(), tolerance, what + " (green)");
+        assertEquals((rgb & 255) / 255f, c.b(), tolerance, what + " (blue)");
     }
 
     /** Rough perceived brightness -- enough to order two shades, which is all these assertions need. */
