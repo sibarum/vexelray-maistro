@@ -5,6 +5,7 @@ import dev.vexelray.maistro.map.Layout;
 import dev.vexelray.maistro.map.MapGraph;
 
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.UnaryOperator;
 
 /**
@@ -111,10 +112,14 @@ record Doc(Transcript transcript, String activity, boolean busy, Panes panes, Ag
      *
      * <p>The positions are kept beside the graph rather than worked out by the view, because a layout is only stable
      * against the one before it ({@link Layout#next}), and that history belongs to the session, not to the widgets.
+     *
+     * <p>The <b>anchor</b> is the node the human clicked, which the next message starts from; empty when there is
+     * none. It is kept apart from the graph's focus because the agent moves the focus too, and a message should be
+     * scoped to a node only when the human picked it.
      */
-    record Mind(MapGraph graph, Map<String, Layout.Point> positions, int turn) {
+    record Mind(MapGraph graph, Map<String, Layout.Point> positions, int turn, String anchor) {
 
-        static final Mind EMPTY = new Mind(MapGraph.EMPTY, Map.of(), 0);
+        static final Mind EMPTY = new Mind(MapGraph.EMPTY, Map.of(), 0, "");
 
         /** The width of one character of a node's label, and its padding, in layout units. */
         static final double CHAR = 7.5;
@@ -130,18 +135,36 @@ record Doc(Transcript transcript, String activity, boolean busy, Panes panes, Ag
             return new Layout.Size(node.shownLabel().length() * CHAR + PAD, HEIGHT);
         }
 
+        /** The human spoke: a new turn, and the anchor, used, is let go. */
         Mind spoke() {
-            return new Mind(graph, positions, turn + 1);
+            return new Mind(graph, positions, turn + 1, "");
         }
 
-        /** Focus a node; unchanged if there is no such node. Nothing moves, so nothing is laid out again. */
-        Mind focused(String id) {
-            return new Mind(graph.focus(id), positions, turn);
+        /**
+         * The human picked a node: focus it, and start the next message from it. Unchanged if there is no such node.
+         * Nothing moves, so nothing is laid out again.
+         */
+        Mind picked(String id) {
+            return graph.contains(id) ? new Mind(graph.focus(id), positions, turn, id) : this;
         }
 
-        /** The graph changed: lay it out against where everything was. Pure, so it may run inside a commit. */
+        /** The next message starts from nowhere in particular. */
+        Mind unanchored() {
+            return new Mind(graph, positions, turn, "");
+        }
+
+        /** The node the next message starts from, if the human picked one. */
+        Optional<dev.vexelray.maistro.map.Node> anchorNode() {
+            return anchor.isEmpty() ? Optional.empty() : graph.node(anchor);
+        }
+
+        /**
+         * The graph changed: lay it out against where everything was, and drop the anchor if its node went. Pure, so
+         * it may run inside a commit.
+         */
         Mind with(MapGraph next) {
-            return new Mind(next, Layout.next(positions, next, Mind::size), turn);
+            return new Mind(next, Layout.next(positions, next, Mind::size), turn,
+                    next.contains(anchor) ? anchor : "");
         }
     }
 

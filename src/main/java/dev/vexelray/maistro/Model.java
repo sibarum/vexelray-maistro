@@ -52,9 +52,14 @@ final class Model {
         change(d -> d.withPanes(d.panes().toggle(pane)));
     }
 
-    /** Focus a node of the mind map. */
-    void focus(String nodeId) {
-        change(d -> d.withMind(m -> m.focused(nodeId)));
+    /** The human picked a node of the mind map: focus it, and start the next message from it. */
+    void pick(String nodeId) {
+        change(d -> d.withMind(m -> m.picked(nodeId)));
+    }
+
+    /** The next message starts from nowhere in particular. */
+    void unanchor() {
+        change(d -> d.withMind(Doc.Mind::unanchored));
     }
 
     /** Say something on the status line. */

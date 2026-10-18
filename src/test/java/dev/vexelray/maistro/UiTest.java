@@ -157,14 +157,46 @@ class UiTest {
                 """;
         c.onAssistantText(new AgentEvent.AssistantText("m1", reply, ""));
         Doc.Mind before = wiring.model().doc().mind();
+        assertEquals("", before.anchor(), "the agent's focus is not the human's pick");
 
-        wiring.model().focus("surprise");
+        wiring.model().pick("surprise");
         Doc.Mind after = wiring.model().doc().mind();
         assertEquals("surprise", after.graph().focus().orElseThrow());
+        assertEquals("surprise", after.anchor());
         assertEquals(before.positions(), after.positions(), "nothing moved");
 
-        wiring.model().focus("no-such-node");
+        wiring.model().pick("no-such-node");
         assertEquals(after, wiring.model().doc().mind());
+
+        wiring.model().unanchor();
+        assertEquals("", wiring.model().doc().mind().anchor());
+        assertEquals("surprise", wiring.model().doc().mind().graph().focus().orElseThrow(), "the focus stays");
+    }
+
+    @Test
+    void anAnchorIsUsedOnceAndGoesWithItsNode() {
+        MapGraph graph = MapGraph.EMPTY.withNode(Node.of("a", "KV cache", 1)).withNode(Node.of("b", "Other", 1));
+        Doc.Mind picked = Doc.Mind.EMPTY.with(graph).picked("a");
+        assertEquals("KV cache", picked.anchorNode().orElseThrow().label());
+        assertEquals("", picked.spoke().anchor(), "speaking uses it up");
+        assertEquals("a", picked.with(graph.withNode(Node.of("c", "New", 2))).anchor(), "a growing map keeps it");
+        assertEquals("", picked.with(graph.carve("a", "wrong", 2)).anchor(), "a carve takes it");
+    }
+
+    @Test
+    void aMessageFromANodeCarriesItsNeighbourhood() {
+        MapGraph graph = MapGraph.EMPTY
+                .withNode(Node.of("a", "KV cache", 1))
+                .withNode(Node.of("b", "Surprise score", 1))
+                .withNode(Node.of("c", "Far away", 1))
+                .withEdge(new Edge("b", "a", "drives", 1))
+                .withEdge(new Edge("a", "c", "", 1));
+        String prompt = Conductor.fromNode(graph, graph.node("b").orElseThrow(), "Why?");
+        assertTrue(prompt.startsWith("This message starts from the map node \"Surprise score\" (b)."), prompt);
+        assertTrue(prompt.contains("node a \"KV cache\""), prompt);
+        assertTrue(prompt.contains("edge b a \"drives\""), prompt);
+        assertFalse(prompt.contains("Far away"), "two links away is outside: " + prompt);
+        assertTrue(prompt.endsWith("```\n\nWhy?"), prompt);
     }
 
     @Test

@@ -47,9 +47,14 @@ final class ConversationPane {
     /** Each speaker's heading colour: the human in ink, the agent in amber, a tool in teal, a note faint. */
     private final Map<Turn.Who, Color> headings = new EnumMap<>(Turn.Who.class);
 
+    /** Over the composer while the next message starts from a node: which node, and a button to let it go. */
+    private final Node from;
+    private final Node fromLabel;
+
     private volatile Consumer<String> send = text -> { };
 
-    ConversationPane(Gui gui) {
+    /** The conversation; {@code unanchor} is pressing the ✕ on the {@code from} chip. */
+    ConversationPane(Gui gui, Runnable unanchor) {
         this.gui = gui;
         this.markup = new Markdown.Style(
                 gui.theme().color(Role.ACCENT),
@@ -97,12 +102,27 @@ final class ConversationPane {
                 .border(Length.dp(1), Look.RULE)
                 .children(composer.node(), sendButton.node());
 
+        fromLabel = gui.text("").font(Type.MONO).textSize(Type.LABEL).textColor(gui.theme().color(Role.ACCENT));
+        gui.landmark(Landmarks.COMPOSER_FROM, fromLabel);
+        IconButton clear = new IconButton(gui, Icon.CLOSE, "Start from nowhere in particular")
+                .size(Type.TARGET, Type.ICON)
+                .tip("Start from nowhere in particular")
+                .onPress(unanchor);
+        gui.landmark(Landmarks.COMPOSER_FROM_CLEAR, clear.node());
+        from = gui.row()
+                .width(Length.FILL)
+                .padding(Length.dp(0), Type.GUTTER)
+                .gap(Type.TIGHT)
+                .alignItems(AlignItems.CENTER)
+                .children(fromLabel, clear.node())
+                .visible(false);
+
         root = gui.column()
                 .width(Type.CONVERSATION).height(Length.FILL)
                 .background(gui.theme().color(Role.PANEL))
                 .border(Length.dp(1), Look.RULE)
                 .alignItems(AlignItems.STRETCH)
-                .children(header(gui, "CONVERSATION"), transcript, composerRow);
+                .children(header(gui, "CONVERSATION"), transcript, from, composerRow);
         gui.landmark(Landmarks.CONVERSATION, root);
     }
 
@@ -122,6 +142,12 @@ final class ConversationPane {
     /** What submitting the composer does. Handed the text, never empty. */
     void onSend(Consumer<String> handler) {
         this.send = handler;
+    }
+
+    /** Say which node the next message starts from: its label, or empty for none. */
+    void showAnchor(String label) {
+        fromLabel.text(label.isEmpty() ? "" : "from · " + label);
+        from.visible(!label.isEmpty());
     }
 
     /** Put the keyboard in the composer. */

@@ -85,6 +85,11 @@ in teal, that ends with the first line of its result. The agent is asked (in its
 a `maistro-map` block; Maistro strips it from the transcript, adds what it names to the map, and puts a chip under
 the reply saying what changed. The map's nodes from the last turn are outlined in amber, and the focus is filled.
 
+Clicking a node focuses it, and the next message starts from it: `from · <label>` shows over the composer (✕ lets
+it go), and the agent is told which node and given its neighbourhood, the node and what it links to directly, as a
+`maistro-map` block ahead of the message. It is used once. The agent still has the whole conversation; this says
+where to look, and is not a fork.
+
 ## How it is put together
 
 Read these in this order.
@@ -208,16 +213,17 @@ finish, and `click composer` then `type ...` and `key ENTER` sends one. `otterma
 
 ### Without a logged-in Claude Code
 
-`src/test/ottermate/` holds a check that needs no login and no network: `fake-claude.cmd` stands in for the CLI and
-prints one recorded turn (`replay-map-turn.jsonl`) whose `maistro-map` block puts three nodes on the map, and
-`map-focus.txt` sends a message, clicks a node and waits for the focus to move. It leaves its two screenshots in
-`target/`. Copy it to check anything that needs a reply on screen.
+`src/test/ottermate/` holds a check that needs no login and no network. `fake-claude.cmd` stands in for the CLI
+(it runs `FakeClaude.java` as a single source file, so it needs `java` on `PATH`): it answers every message with
+one recorded turn (`replay-map-turn.jsonl`) whose `maistro-map` block puts three nodes on the map, and writes what
+it was sent to `target/fake-claude-stdin.txt`, which is how to see what the agent is really told. `map-focus.txt`
+sends a message, clicks a node, sends a second message from it, then picks another node and lets it go with ✕,
+leaving its
+screenshots in `target/`. Copy it to check anything that needs a reply on screen.
 
 ```
 ottermate --script src/test/ottermate/map-focus.txt --launch mvn.cmd compile exec:exec -Dautomation=0 "-Dapp.args=--claude=src/test/ottermate/fake-claude.cmd"
 ```
-
-The stand-in exits after its turn, so the status line ends at `agent: stopped`, not `idle`.
 
 ## Logging
 

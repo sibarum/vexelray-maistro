@@ -52,8 +52,8 @@ final class Ui {
         }
 
         rail = new PaneRail(gui, model::toggle);
-        conversation = new ConversationPane(gui);
-        map = new MapPane(gui, model::focus);
+        conversation = new ConversationPane(gui, model::unanchor);
+        map = new MapPane(gui, model::pick);
         context = new ContextPane(gui);
 
         Node body = gui.row()
@@ -84,6 +84,7 @@ final class Ui {
         map.node().visible(doc.panes().map());
         context.node().visible(doc.panes().context());
         conversation.show(doc.transcript());
+        conversation.showAnchor(doc.mind().anchorNode().map(dev.vexelray.maistro.map.Node::shownLabel).orElse(""));
         context.show(doc.agent());
         context.show(doc.mind().graph());
         map.show(doc.mind());

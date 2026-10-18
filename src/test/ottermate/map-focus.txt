@@ -3,9 +3,23 @@ click composer
 type hello
 key ENTER
 await context.focus KV cache
+await status.agent idle
 settle
 shot target/map-focus-before.png
 click map.node.beta
 await context.focus Surprise score
+await composer.from Surprise score
 settle
 shot target/map-focus-after.png
+click composer
+type Why does it drive eviction?
+key ENTER
+await status.agent idle
+settle
+find from ·
+shot target/map-focus-sent.png
+click map.node.alpha
+await composer.from KV cache
+click composer.from.clear
+settle
+find from ·

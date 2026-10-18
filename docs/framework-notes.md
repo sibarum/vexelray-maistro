@@ -63,6 +63,10 @@ several times under `--keep-going`, which also stops the script stopping on real
 
 What the framework could do: `await <landmark> <text> within 120s`, or an `--await-timeout` option.
 
+Its other half: `await` can only wait for a name to *contain* something, never for it to stop, or for a node to go.
+After the composer's ✕, `src/test/ottermate/map-focus.txt` can only `find` and leave a person to read the answer,
+because a check that the chip went would need `await composer.from !from` or `await-gone composer.from`.
+
 ## FN-4 · Stale worktrees inside the stack's checkouts double every search hit 🔬
 
 `vexelray-gui/.claude/worktrees/` holds two full copies of the repository and `vexelray-framework/.claude/worktrees/`

@@ -14,8 +14,9 @@ longer list this is drawn from.
       CLI's "Not logged in": the desktop app's bundled `claude.exe` needs its own `/login`.
 - [ ] Permissions. Claude Code runs with `--permission-mode default` and no prompt tool, so anything that needs
       approval is denied. Inline approve/deny in the transcript, over `--permission-prompt-tool` (guide, gap 3).
-- [ ] Start a turn from the focused node with its neighbourhood (`MapGraph.neighbourhood`, `MapProtocol.render`).
-      Clicking a node focuses it already (`map.node.<id>`).
+- [ ] True forks: a turn from a node in a fresh Claude Code session given only its neighbourhood, shown as a
+      branch, merged back as new edges (guide, *Replies built to be forked*). Today a node only narrows where the
+      one session looks (`Conductor.fromNode`).
 - [ ] Ctrl+N for a new conversation, and resuming an earlier one (`--resume`; the conductor already resumes after
       the process dies).
 

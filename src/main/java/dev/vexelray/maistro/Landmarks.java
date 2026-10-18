@@ -26,6 +26,10 @@ final class Landmarks {
     static final String TRANSCRIPT = "transcript";
     static final String COMPOSER = "composer";
     static final String SEND = "send";
+    /** Over the composer: {@code from · <label>} while the next message starts from a node, else empty. */
+    static final String COMPOSER_FROM = "composer.from";
+    /** The ✕ that lets that node go. */
+    static final String COMPOSER_FROM_CLEAR = "composer.from.clear";
 
     /** The mind map, the main stage. */
     static final String MAP = "map";

@@ -9,6 +9,7 @@ import dev.vexelray.maistro.chat.Turn;
 import dev.vexelray.maistro.map.MapDelta;
 import dev.vexelray.maistro.map.MapGraph;
 import dev.vexelray.maistro.map.MapProtocol;
+import dev.vexelray.maistro.map.Node;
 import sibarum.probe.Log;
 
 import java.io.IOException;
@@ -16,7 +17,9 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * The agent's side of the conversation: one Claude Code process, and what turns its events into changes to the
@@ -73,17 +76,31 @@ final class Conductor implements AgentListener, AutoCloseable {
 
     // ------------------------------------------------------------------ commands
 
-    /** Say {@code text} to the agent. On a worker; starts the process the first time. */
+    /**
+     * Say {@code text} to the agent. On a worker; starts the process the first time.
+     *
+     * <p>If the human picked a node, the message starts from it: the agent is told so and given the node's
+     * neighbourhood ({@link #fromNode}), the transcript shows the text with a {@code from · <label>} chip, and the
+     * anchor is let go. The anchor is read inside the same commit that lets it go, so a click landing meanwhile is
+     * either in this message or kept for the next, never lost. A commit's function may run more than once, and the
+     * last run is the one committed, so the prompt it leaves is the one that matches the transcript.
+     */
     void send(String text) {
-        model.change(d -> d.withTranscript(t -> t.append(id -> Turn.human(id, text)))
-                .withMind(Doc.Mind::spoke)
-                .withActivity("thinking", true));
+        AtomicReference<String> prompt = new AtomicReference<>(text);
+        model.change(d -> {
+            Optional<Node> from = d.mind().anchorNode();
+            prompt.set(from.map(n -> fromNode(d.mind().graph(), n, text)).orElse(text));
+            List<String> chips = from.map(n -> List.of("from · " + n.shownLabel())).orElse(List.of());
+            return d.withTranscript(t -> t.append(id -> Turn.human(id, text).withChips(chips)))
+                    .withMind(Doc.Mind::spoke)
+                    .withActivity("thinking", true);
+        });
         AgentSession s = sessionOrStart();
         if (s == null) {
             model.change(d -> d.withActivity("not started", false));
             return;
         }
-        if (!s.send(text)) {
+        if (!s.send(prompt.get())) {
             failed("Could not write to Claude Code: its process has gone.");
         }
     }
@@ -290,6 +307,21 @@ final class Conductor implements AgentListener, AutoCloseable {
     }
 
     // ------------------------------------------------------------------ helpers
+
+    /** How far from the picked node its neighbourhood reaches: the node and what it links to directly. */
+    static final int NEIGHBOURHOOD = 1;
+
+    /**
+     * What the agent is told when a message starts from {@code node}: which node, its neighbourhood as a
+     * {@code maistro-map} block, and then the message. The whole conversation is still the agent's; this says where
+     * to look.
+     */
+    static String fromNode(MapGraph graph, Node node, String text) {
+        return "This message starts from the map node \"" + node.shownLabel() + "\" (" + node.id() + "). "
+                + "Answer from that part of the map. Its neighbourhood:\n\n"
+                + MapProtocol.render(graph.neighbourhood(node.id(), NEIGHBOURHOOD))
+                + "\n" + text;
+    }
 
     private void failed(String message) {
         model.change(d -> d.withTranscript(t -> t.append(id -> Turn.note(id, message, true)))
