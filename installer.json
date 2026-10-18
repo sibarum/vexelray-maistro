@@ -1,0 +1,27 @@
+{
+  "id": "maistro",
+  "name": "Maistro",
+  "publisher": "sibarum",
+  "description": "A desktop client for Claude Code, on the VexelRay stack: the conversation beside a mind map its replies grow. Needs the Claude Code CLI, logged in.",
+  "version": "0.1.1-SNAPSHOT",
+
+  "repo": "sibarum/vexelray-dist",
+  "branch": "main",
+  "repoPath": "apps/maistro",
+  "releasesRepo": "sibarum/vexelray-dist",
+  "tagFormat": "maistro-v{version}",
+
+  "windows": {
+    "binaries": [
+      {
+        "name": "maistro",
+        "source": "target/vexelray-maistro.exe",
+        "file": "maistro.exe",
+        "icon": "src/main/rc/vexelray-maistro.ico",
+        "addToPath": true,
+        "shortcuts": { "desktop": true, "startMenu": true, "label": "Maistro" }
+      },
+      { "name": "notices", "source": "THIRD-PARTY-NOTICES.txt" }
+    ]
+  }
+}
