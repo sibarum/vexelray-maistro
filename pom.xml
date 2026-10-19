@@ -113,6 +113,7 @@
                 <directory>src/main/rc</directory>
                 <includes>
                     <include>vexelray-maistro.ico</include>
+                    <include>vexelray-maistro-background.ico</include>
                 </includes>
             </resource>
         </resources>

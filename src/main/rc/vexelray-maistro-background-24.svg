@@ -1,0 +1,23 @@
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<linearGradient id="b53tm1" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0" stop-color="#2d0e0b"/>
+<stop offset="1" stop-color="#170605"/>
+</linearGradient>
+<linearGradient id="b53em1" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0" stop-color="#ffc2b8" stop-opacity=".55"/>
+<stop offset=".45" stop-color="#ffc2b8" stop-opacity="0"/>
+</linearGradient>
+</defs>
+<g opacity=".6">
+<rect x="2" y="2" width="60" height="60" rx="15" fill="url(#b53tm1)"/>
+<rect x="2" y="2" width="60" height="60" rx="15" fill="none" stroke="#46160f" stroke-width="1"/>
+<path d="M35 32 L45 17 M51 22 L50 37 M35 42 L45 43" fill="none" stroke="#ff8577" stroke-width="3.4" stroke-linecap="round"/>
+<rect x="11" y="27" width="24" height="22" rx="4" fill="#170605" stroke="#ffd9d2" stroke-width="3.4"/>
+<path d="M11 34.5 H35" stroke="#ffd9d2" stroke-width="3.4"/>
+<circle cx="48" cy="17" r="6.5" fill="#ff8577"/>
+<circle cx="50" cy="43" r="5.2" fill="#ff8577"/>
+<rect x="2.6" y="2.6" width="58.8" height="58.8" rx="14.4" fill="none" stroke="url(#b53em1)" stroke-width="1.2"/>
+</g>
+<rect x="3" y="3" width="58" height="58" rx="14" fill="none" stroke="#ff8577" stroke-width="4" stroke-dasharray="15.6 10.4" stroke-dashoffset="-5.2" stroke-linecap="round"/>
+</svg>
