@@ -6,7 +6,7 @@
 
     <groupId>dev.vexelray</groupId>
     <artifactId>vexelray-maistro</artifactId>
-    <version>0.1.1-SNAPSHOT</version>
+    <version>0.1.1</version>
 
     <name>vexelray-maistro</name>
     <description>
@@ -17,10 +17,10 @@
         <maven.compiler.release>25</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
-        <vexelray-framework.version>0.1.1-SNAPSHOT</vexelray-framework.version>
-        <vexelray-gui.version>0.1.1-SNAPSHOT</vexelray-gui.version>
-        <vexelray.version>0.1.1-SNAPSHOT</vexelray.version>
-        <tactroller.version>1.1-SNAPSHOT</tactroller.version>
+        <vexelray-framework.version>0.1.1</vexelray-framework.version>
+        <vexelray-gui.version>0.1.1</vexelray-gui.version>
+        <vexelray.version>0.1.1</vexelray.version>
+        <tactroller.version>1.1</tactroller.version>
         <junit.version>5.11.4</junit.version>
 
         <app.mainClass>dev.vexelray.maistro.Maistro</app.mainClass>
