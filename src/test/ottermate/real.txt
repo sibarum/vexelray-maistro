@@ -1,0 +1,25 @@
+# Against a logged-in Claude Code; run with --keep-going, since a real reply can outlast one 30 s await (FN-3).
+await composer
+click composer
+type In two short sentences: what is a KV cache, and what decides what it evicts? Put the ideas on the map.
+key ENTER
+await status.agent idle
+await status.agent idle
+await status.agent idle
+await status.agent idle
+settle
+shot target/real-reply.png
+click composer
+type Use the Write tool to create maistro-probe.txt containing the word hi. Do not use Bash.
+key ENTER
+await status.agent waiting
+await status.agent waiting
+await status.agent waiting
+settle
+shot target/real-asking.png
+click ask.deny
+await status.agent idle
+await status.agent idle
+await status.agent idle
+settle
+shot target/real-denied.png

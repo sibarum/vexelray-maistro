@@ -307,9 +307,11 @@ public final class AgentSession implements AutoCloseable {
             LOG.debug("agent {}: not sending, the session is {}", number, closed ? "closed" : "over");
             return false;
         }
-        byte[] bytes = (line.toJson() + "\n").getBytes(StandardCharsets.UTF_8);
+        String json = line.toJson();
+        byte[] bytes = (json + "\n").getBytes(StandardCharsets.UTF_8);
         synchronized (writeLock) {
             try {
+                LOG.trace("agent {} in: {}", number, json);
                 stdin.write(bytes);
                 stdin.flush();
                 return true;
@@ -366,6 +368,8 @@ public final class AgentSession implements AutoCloseable {
         try (BufferedReader r = new BufferedReader(new InputStreamReader(process.stdout(), StandardCharsets.UTF_8))) {
             String line;
             while ((line = r.readLine()) != null) {
+                // Every line as the CLI wrote it, at trace: how a new message shape is first seen and recorded.
+                LOG.trace("agent {} out: {}", number, line);
                 for (AgentEvent e : EventParser.parse(line)) {
                     e.to(watcher);
                     deliver(e);
