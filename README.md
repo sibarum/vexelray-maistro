@@ -35,13 +35,13 @@ Two builds, made with GraalVM native-image (a GraalVM JDK as `JAVA_HOME`, and a 
 which native-image needs for `link.exe` and the icon step needs for `rc.exe`):
 
 ```
-mvn -Pnative-release package -DskipTests      # target/vexelray-maistro.exe        what ships: no console
-mvn -Pnative package -DskipTests              # target/vexelray-maistro-debug.exe  a console: prints the automation port line
+mvn -Pnative-release package -DskipTests      # vexelray-maistro/target/vexelray-maistro.exe        what ships: no console
+mvn -Pnative package -DskipTests              # vexelray-maistro/target/vexelray-maistro-debug.exe  a console: prints the automation port line
 ```
 
 Both carry the automation sockets, off until asked for ([Automation](#automation)), so ottermate can drive either.
 
-This program's own native-image metadata is `src/main/resources/META-INF/native-image/.../reachability-metadata.json`,
+This program's own native-image metadata is `vexelray-maistro/src/main/resources/META-INF/native-image/.../reachability-metadata.json`,
 and it is short because almost nothing is this program's: the libraries register their own, and the processor
 registers the icon. If a native run fails on something the JVM run did not (a `Missing...RegistrationError`), run it
 on a JVM under `-agentlib:native-image-agent=config-output-dir=...`, do the thing that failed, and add

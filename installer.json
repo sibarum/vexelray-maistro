@@ -15,9 +15,9 @@
     "binaries": [
       {
         "name": "maistro",
-        "source": "target/vexelray-maistro.exe",
+        "source": "vexelray-maistro/target/vexelray-maistro.exe",
         "file": "maistro.exe",
-        "icon": "src/main/rc/vexelray-maistro.ico",
+        "icon": "vexelray-maistro/src/main/rc/vexelray-maistro.ico",
         "addToPath": true,
         "shortcuts": { "desktop": true, "startMenu": true, "label": "Maistro" }
       },
