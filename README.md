@@ -306,7 +306,9 @@ LOG.warn("could not save {}", path, exception);               // the exception g
 `--log=debug` (or `off`) changes the level for one launch, and `-Dlog.level.vexelray-maistro.files=trace` raises one
 logger. Levels, settings and the rules for what belongs at which level are in `atchung/docs/logging.md`.
 
-## The two documents
+## The three documents
 
 `docs/framework-notes.md` and `docs/TODO.md` start nearly empty and are meant to be filled in as you go. See the note
-at the top of the first one — it is the more important of the two.
+at the top of the first one — it is the more important of the two. `docs/retrospective.md` is filled in at the end of
+each milestone: the pass over the notes that looks for what they have in common, and the one the framework reads
+first.

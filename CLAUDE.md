@@ -65,11 +65,15 @@ Never add a `--capture` flag, a robot or a screen grab to the application.
 
 When a run fails, read `target/logs/vexelray-maistro.log` (`target-linux/logs/` on Linux) before changing code. Under automation it is at trace level.
 
-## The two documents
+## The three documents
 
 - **`docs/framework-notes.md`**: when you work around something the framework does not do, add an FN entry **at the
   moment you write the workaround**, in the format at the top of that file. That is how the gap gets fixed upstream
   instead of copied into every application.
+- **`docs/retrospective.md`**: **when a milestone is done, before starting the next**, read the milestone back and
+  add its section, in the format at the top of that file: the shapes in the notes since the last one, what would stop
+  each, your own mistakes, and what to keep. Write it while this conversation still remembers what each finding
+  cost, and put your own mistakes in as plainly as the framework's. Never delete a section.
 - **`docs/TODO.md`**: work on this application that is known about and not done. Delete an entry when it is done.
 
 ## How to work here
