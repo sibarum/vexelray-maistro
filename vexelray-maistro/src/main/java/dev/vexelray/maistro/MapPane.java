@@ -86,7 +86,9 @@ final class MapPane {
                 .wordWrap(true).width(Length.FILL);
         layer = gui.box()
                 .floatAt(Type.GUTTER, Type.GUTTER)
-                .size(Length.percent(100), Length.percent(100));
+                .size(Length.percent(100), Length.percent(100))
+                // The boxes are a view over the drawing, which jumps: sliding them would leave them behind it.
+                .childMotion(false);
         gui.onResizeUi(layer, this::resized);
         Node stage = gui.column()
                 .width(Length.FILL).height(Length.grow(1f))
