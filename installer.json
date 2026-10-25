@@ -3,7 +3,7 @@
   "name": "Maistro",
   "publisher": "sibarum",
   "description": "A desktop client for Claude Code, on the VexelRay stack: the conversation beside a mind map its replies grow. Needs the Claude Code CLI, logged in.",
-  "version": "0.1.2-SNAPSHOT",
+  "version": "0.1.2",
 
   "repo": "sibarum/vexelray-dist",
   "branch": "main",
