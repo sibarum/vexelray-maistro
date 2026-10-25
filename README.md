@@ -129,7 +129,7 @@ Read these in this order.
 | `Recipes.java` | **what this application builds.** One `@Provides` method per part; `MaistroAppWiring`, which builds them in order, is generated from it while the project compiles. A part's phase is the latest phase of anything it takes, so there is none to declare. New parts go here. |
 | `Doc.java`, `Model.java` | the session: its strands (the main one and each branch, with its transcript, what its agent is doing and its readouts), which panes are up and the mind map, as one immutable value changed only by functions of the current value, committed through atchung's `State`. |
 | `Conductor.java` | the agent's side: a Claude Code process per strand (a `Lane`), and each of its events turned into one commit to its strand. |
-| `Archive.java` | every conversation kept, one JSON file each under `~/.vexelray-maistro/conversations/`, written on the offload lane when a turn ends and once more as the application closes. |
+| `Archive.java` | every conversation kept, one JSON file each under `~/.maistro/conversations/`, written on the offload lane when a turn ends and once more as the application closes. |
 | `Ui.java` and its panes | the window: `PaneRail`, `ConversationPane`, `MapPane`, `ContextPane`. Hold no state; `show(Doc)` writes everything derived from the session. |
 | `Actions.java` | every command and its chord. |
 | `Session.java` | what comes back next time (the panes), in the framework's one settings store. |
@@ -271,7 +271,7 @@ of its own, and `branch.txt` uses it: it starts a branch from a node, asks it so
 switches to `Main` and abandons the branch; `merge.txt` merges one instead and checks what the main agent is told. The stand-in appends to `target/fake-claude-stdin.txt` and never empties
 it, one `#process` line per process, so a branch's messages land below main's.
 
-A run under `ottermate` that ends a turn saves the conversation into your real `~/.vexelray-maistro`. To keep a check
+A run under `ottermate` that ends a turn saves the conversation into your real `~/.maistro`. To keep a check
 out of it, give the run a home of its own. That moves the settings and the log there too
 (`target/ottermate-home/logs/`), so read the log there. `new-conversation.txt` (with `fake-claude.cmd`) and
 `new-conversation-refused.txt` (with `fake-claude-permission.cmd`) check Ctrl+N that way, and `resume.txt` (with
@@ -292,9 +292,9 @@ The framework configures logging for you, before anything else runs, and the def
 | Run | Console | File |
 | --- | --- | --- |
 | a test | warnings | none |
-| from your checkout (`mvn exec:exec`) | info | `target/logs/vexelray-maistro.log`, debug |
-| driven by `ottermate` or `-Dautomation` | debug | `…/vexelray-maistro.log`, **trace**, with a probe trace beside it |
-| a native image | warnings | `~/.vexelray-maistro/logs/vexelray-maistro.log`, info |
+| from your checkout (`mvn exec:exec`) | info | `target/logs/maistro.log`, debug |
+| driven by `ottermate` or `-Dautomation` | debug | `…/maistro.log`, **trace**, with a probe trace beside it |
+| a native image | warnings | `~/.maistro/logs/maistro.log`, info |
 
 Write to it with a logger, not `System.out` — `Actions` does, as `vexelray-maistro.files`:
 

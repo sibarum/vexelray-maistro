@@ -104,7 +104,7 @@ final class Recipes {
     }
 
     /**
-     * Every conversation, kept on disk under the application's home ({@code ~/.vexelray-maistro/conversations}, or
+     * Every conversation, kept on disk under the application's home ({@code ~/.maistro/conversations}, or
      * under {@code -Dvexelray-maistro.home}), written on the offload lane when a turn ends. Writes nothing until
      * {@link #start} arms it.
      */
