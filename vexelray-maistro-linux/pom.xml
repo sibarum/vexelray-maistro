@@ -7,7 +7,7 @@
     <parent>
         <groupId>dev.vexelray</groupId>
         <artifactId>vexelray-maistro-parent</artifactId>
-        <version>0.1.2-SNAPSHOT</version>
+        <version>0.1.3-SNAPSHOT</version>
     </parent>
 
     <artifactId>vexelray-maistro-linux</artifactId>
