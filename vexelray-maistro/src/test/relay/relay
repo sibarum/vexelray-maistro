@@ -1,0 +1,4 @@
+#!/bin/sh
+# Answers as the model to a running relay-claude.cmd. "relay help" lists the commands. See RelayClaude.java.
+here=$(cd "$(dirname "$0")" && pwd)
+exec java -cp "$here/../../../target/classes" "$here/RelayClaude.java" client "$here/../../../target/relay" "$@"

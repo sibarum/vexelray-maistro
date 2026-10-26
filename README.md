@@ -286,6 +286,37 @@ ottermate --script src/test/ottermate/new-conversation.txt --launch mvn.cmd comp
 `ottermate` kills the application when a script ends, and a script cannot close its window, so nothing that runs
 at shutdown is seen in these checks.
 
+### Playing the model by hand: the relay
+
+A replay can only say what was written down in advance. `src/test/relay/relay-claude.cmd` is a stand-in whose
+answers come from whoever is at the other end, usually an agent testing a change: Maistro talks to it as it talks
+to the CLI, and every message it sends waits for that agent's `relay next`. Start Maistro on it, leave it running,
+and drive both ends:
+
+```
+mvn.cmd compile exec:exec -Dautomation=0 "-Dapp.args=--claude=src/test/relay/relay-claude.cmd"
+```
+
+```
+ottermate --app maistro --script ask.txt                  # the human: click composer, type, key ENTER
+src/test/relay/relay next                                 # the model: prints the message, opens the turn
+echo '{"app":"maistro"}' | src/test/relay/relay tool shot # calls Maistro's own tool, as the CLI would
+src/test/relay/relay say <<'EOF'                          # the reply, maistro-map block and all; ends the turn
+...
+EOF
+```
+
+`relay help` lists the rest: `text` and `think` (the turn stays open), `ask <Tool>` (a permission prompt that waits for
+Allow or Deny and prints the answer), `end`, `status`, and `exit <code>` (the CLI crashing). Like the real CLI, the
+stand-in does Maistro's MCP handshake when the first message arrives, so `status` shows the tools Maistro gave it,
+and `tool` runs them for real over the control channel. A picture a tool returns is saved under `target/relay/images/`
+to look at. What Maistro sent is in `target/relay/stdin-<pid>.txt`.
+
+The stand-in is `RelayClaude.java`, run as a single source file with `target/classes` on the class path for
+Maistro's own JSON, so compile first. It is not passed Maistro's arguments, because `cmd` would re-read the system
+prompt's `<` and `>` as redirections. An interrupt ends an open turn as `error_during_execution`, which is a guess:
+no real interrupted turn has been recorded yet.
+
 ## Logging
 
 The framework configures logging for you, before anything else runs, and the defaults follow what kind of run it is:
