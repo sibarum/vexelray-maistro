@@ -21,8 +21,8 @@ import java.util.List;
  *       {@link AgentEvent.ToolInputDelta}, else {@link AgentEvent.StreamMarker}</li>
  *   <li>{@code result}: {@link AgentEvent.Result}</li>
  *   <li>{@code control_response}: {@link AgentEvent.ControlResponse}</li>
- *   <li>{@code control_request}: {@link AgentEvent.PermissionRequest} for {@code can_use_tool}, else
- *       {@link AgentEvent.ControlRequest}</li>
+ *   <li>{@code control_request}: {@link AgentEvent.PermissionRequest} for {@code can_use_tool},
+ *       {@link AgentEvent.McpMessage} for {@code mcp_message}, else {@link AgentEvent.ControlRequest}</li>
  * </ul>
  */
 public final class EventParser {
@@ -180,7 +180,7 @@ public final class EventParser {
                 (int) v.get("num_turns").asLong(0), usage, v.get("terminal_reason").asString(), v);
     }
 
-    /** A request from the CLI: a permission prompt as its own record, anything else as it came. */
+    /** A request from the CLI: a permission prompt or an MCP message as its own record, anything else as it came. */
     private static AgentEvent controlRequest(JsonValue v) {
         String id = v.get("request_id").asString();
         JsonValue r = v.get("request");
@@ -188,6 +188,9 @@ public final class EventParser {
         if (subtype.equals("can_use_tool")) {
             return new AgentEvent.PermissionRequest(id, r.get("tool_name").asString(), r.get("input"),
                     r.get("tool_use_id").asString(), r);
+        }
+        if (subtype.equals("mcp_message")) {
+            return new AgentEvent.McpMessage(id, r.get("server_name").asString(), r.get("message"));
         }
         return new AgentEvent.ControlRequest(id, subtype, r);
     }

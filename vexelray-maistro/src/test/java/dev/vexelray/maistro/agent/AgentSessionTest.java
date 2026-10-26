@@ -369,6 +369,29 @@ class AgentSessionTest {
     }
 
     @Test
+    void mcpRepliesAreControlResponsesCarryingTheServersAnswer() throws Exception {
+        FakeProcess fake = new FakeProcess();
+        AgentSession s = AgentSession.start(AgentSession.Options.of(EXE), new AgentListener() {
+        }, launcherOf(fake));
+        assertTrue(s.answerMcp("r1", Json.parse("{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}")));
+        assertEquals(List.of("{\"type\":\"control_response\",\"response\":{\"subtype\":\"success\",\"request_id\":"
+                + "\"r1\",\"response\":{\"mcp_response\":{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}}}}"),
+                fake.received);
+        s.close();
+    }
+
+    @Test
+    void anMcpServerIsAConfigFileAndItsAllowedTools() {
+        Path config = Path.of("home", "mcp.json");
+        assertEquals(List.of(EXE.toString(), "-p", "--input-format", "stream-json", "--output-format", "stream-json",
+                "--verbose", "--include-partial-messages", "--mcp-config", config.toString(),
+                "--allowedTools", "mcp__m__a,mcp__m__b"),
+                AgentSession.Options.of(EXE).withMcpServer(config, List.of("mcp__m__a", "mcp__m__b")).command());
+        assertEquals(List.of("--mcp-config", config.toString()), AgentSession.Options.of(EXE)
+                .withMcpServer(config, List.of()).extraArgs());
+    }
+
+    @Test
     void allowingWithAnOfferSendsItBackVerbatim() throws Exception {
         FakeProcess fake = new FakeProcess();
         AgentSession s = AgentSession.start(AgentSession.Options.of(EXE), new AgentListener() {

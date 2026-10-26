@@ -226,6 +226,26 @@ class EventParserTest {
         assertEquals("hook_callback", other.subtype());
     }
 
+    /**
+     * Recorded from claude.exe 2.1.308 with an sdk-type server in {@code --mcp-config}, not logged in: the MCP
+     * handshake comes over the control channel before the init line, then the turn fails at the login.
+     */
+    @Test
+    void anInProcessMcpServersHandshakeIsMcpMessages() {
+        Recorder r = parseAll(fixture("real-mcp-handshake.jsonl"));
+        assertEquals(List.of("McpMessage", "McpMessage", "McpMessage", "SessionInit"), r.kinds.subList(0, 4));
+        List<AgentEvent.McpMessage> m = r.all(AgentEvent.McpMessage.class);
+        assertEquals(List.of("initialize", "notifications/initialized", "tools/list"),
+                m.stream().map(x -> x.message().get("method").asString()).toList());
+        assertEquals("maistro", m.getFirst().serverName());
+        assertEquals(0, m.getFirst().message().get("id").asLong(-1));
+        assertTrue(m.get(1).message().get("id").isNull());
+        assertFalse(m.getFirst().requestId().isEmpty());
+        AgentEvent.SessionInit init = r.all(AgentEvent.SessionInit.class).getFirst();
+        assertTrue(init.tools().contains("mcp__maistro__echo"));
+        assertEquals("connected", init.raw().get("mcp_servers").get(0).get("status").asString());
+    }
+
     @Test
     void multiBlockAssistantLineYieldsOneEventPerBlock() {
         String line = "{\"type\":\"assistant\",\"parent_tool_use_id\":\"toolu_parent\",\"message\":{\"id\":\"m1\","

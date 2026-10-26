@@ -70,6 +70,9 @@ public interface AgentEvent {
         default void onPermissionRequest(PermissionRequest e) {
         }
 
+        default void onMcpMessage(McpMessage e) {
+        }
+
         default void onUnknown(Unknown e) {
         }
 
@@ -232,7 +235,7 @@ public interface AgentEvent {
 
     /**
      * A {@code control_request} from the CLI to us that has no record of its own: anything but
-     * {@link PermissionRequest}. Every one wants an answer; {@link AgentSession#refuse} is the one for a request
+     * {@link PermissionRequest} and {@link McpMessage}. Every one wants an answer; {@link AgentSession#refuse} is the one for a request
      * this code does not handle.
      */
     record ControlRequest(String requestId, String subtype, JsonValue request) implements AgentEvent {
@@ -262,6 +265,23 @@ public interface AgentEvent {
         /** The CLI's own suggested rules that can be offered, in words ({@link Suggestion#offered}). */
         public java.util.List<Suggestion> suggestions() {
             return Suggestion.offered(request.get("permission_suggestions"));
+        }
+    }
+
+    /**
+     * {@code control_request} / {@code mcp_message}: a JSON-RPC message for an MCP server that runs in this process
+     * (a {@code "type": "sdk"} entry of {@link AgentSession.Options#withMcpServer}'s config). The CLI sends the whole
+     * MCP conversation this way, handshake first ({@code initialize}, {@code notifications/initialized},
+     * {@code tools/list}), and waits for {@link AgentSession#answerMcp} with the server's reply for each, a
+     * notification included.
+     *
+     * @param serverName the config's name for the server
+     * @param message    the JSON-RPC message, as it came
+     */
+    record McpMessage(String requestId, String serverName, JsonValue message) implements AgentEvent {
+        @Override
+        public void to(Sink l) {
+            l.onMcpMessage(this);
         }
     }
 

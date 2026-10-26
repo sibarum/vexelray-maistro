@@ -10,6 +10,12 @@ longer list this is drawn from.
 
 ## Next
 
+- [ ] On Windows every double quote in a CLI argument is dropped (`ProcessBuilder` passes it unescaped), so
+      `--append-system-prompt` reaches the CLI with `MapProtocol.INSTRUCTIONS`' quotes gone. `--mcp-config` sidesteps it
+      with a file; the prompt does not yet.
+- [ ] Agent tools: record a real `tools/call` from a logged-in run (only the handshake is recorded,
+      `real-mcp-handshake.jsonl`) and see the agent use `shot` on screen. Then slice 2, the driving tools (`click`, `type`,
+      `key`, `settle`, `await`) through the permission prompt.
 - [ ] See a real reply drawn on the map. The pipeline is tested headless, and seen end to end only as far as the
       CLI's "Not logged in": the desktop app's bundled `claude.exe` needs its own `/login`.
 - [ ] Record a real `can_use_tool` request from a logged-in run into `src/test/resources/agent/` and test the

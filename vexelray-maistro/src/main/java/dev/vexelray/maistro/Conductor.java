@@ -13,6 +13,7 @@ import dev.vexelray.maistro.map.MapGraph;
 import dev.vexelray.maistro.map.MapProtocol;
 import dev.vexelray.maistro.map.Merge;
 import dev.vexelray.maistro.map.Node;
+import dev.vexelray.maistro.tools.Toolset;
 import sibarum.probe.Log;
 
 import java.io.IOException;
@@ -73,10 +74,11 @@ final class Conductor implements AutoCloseable {
     static final String CONTEXT = """
             You are running inside Maistro, a desktop client for Claude Code built on the VexelRay stack. The human \
             reads your replies in a conversation pane beside a mind map of the conversation, so prefer short \
-            sections with clear headings over long walls of text. The VexelRay desktop applications can be driven \
-            with ottermate (C:/Users/User/Documents/GitHub/vexelray-gui/vexelray-gui-automation-cli/ottermate, \
-            guide at vexelray-gui/docs/guides/ottermate.md): keys, clicks, reading the tree and readouts, \
-            screenshots. Use it when asked to operate one of them.""";
+            sections with clear headings over long walls of text. Maistro's own tools look at the running VexelRay \
+            desktop applications: apps lists them, tree and find read a window's semantic tree, and shot shows you a \
+            window. Use them when asked about one of those applications. To drive one (keys, clicks, typing), use \
+            ottermate through the shell (C:/Users/User/Documents/GitHub/vexelray-gui/vexelray-gui-automation-cli/ottermate, \
+            guide at vexelray-gui/docs/guides/ottermate.md).""";
 
     /** What the agent is told when the human says no. */
     static final String DENIED = "The human denied this in Maistro. Do not retry it; ask what they want instead.";
@@ -86,11 +88,13 @@ final class Conductor implements AutoCloseable {
 
     private final Model model;
     private final Launch launch;
+    private final Toolset toolset;
     private final Map<String, Lane> lanes = new ConcurrentHashMap<>();
 
-    Conductor(Model model, Launch launch) {
+    Conductor(Model model, Launch launch, Toolset toolset) {
         this.model = model;
         this.launch = launch;
+        this.toolset = toolset;
     }
 
     /** The main strand's lane. */
@@ -305,6 +309,7 @@ final class Conductor implements AutoCloseable {
         for (Lane l : all) {
             l.close();
         }
+        toolset.close();
     }
 
     // ------------------------------------------------------------------ one strand's process
@@ -416,6 +421,11 @@ final class Conductor implements AutoCloseable {
                     .withPermissionMode(blankToNull(launch.permissionMode()))
                     .withWorkingDirectory(launch.cwd().isBlank() ? null : Path.of(launch.cwd()))
                     .withResume(blankToNull(lastSessionId));
+            try {
+                options = options.withMcpServer(toolset.config(), toolset.allowed());
+            } catch (IOException e) {
+                LOG.warn("could not write the tools' config; starting Claude Code without them", e);
+            }
             try {
                 session = AgentSession.start(options, new Current(generation));
                 LOG.info("started Claude Code for strand {} from {} ({})", id, exe, found.reason());
@@ -589,6 +599,23 @@ final class Conductor implements AutoCloseable {
                 return next.withTranscript(t -> t.change(turn, r -> r.asking(labels)))
                         .withActivity("waiting for you: " + e.toolName(), true);
             });
+        }
+
+        /**
+         * A message for Maistro's tools. Answered on a tool thread, to the process that asked even if the lane has
+         * moved on by then (its write then fails quietly); this returns at once.
+         */
+        @Override
+        public void onMcpMessage(AgentEvent.McpMessage e) {
+            AgentSession s = current();
+            if (s == null) {
+                return;
+            }
+            if (!e.serverName().equals(toolset.name())) {
+                s.refuse(e.requestId(), "Maistro has no MCP server " + e.serverName());
+                return;
+            }
+            toolset.handle(e.message(), reply -> s.answerMcp(e.requestId(), reply));
         }
 
         /** A request Maistro has no answer for gets an error rather than silence, which would stall the CLI. */

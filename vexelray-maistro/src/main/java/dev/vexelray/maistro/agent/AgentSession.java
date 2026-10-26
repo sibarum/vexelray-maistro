@@ -118,6 +118,22 @@ public final class AgentSession implements AutoCloseable {
             return withExtraArgs(args);
         }
 
+        /**
+         * Give the agent the MCP servers in the config file {@code config} ({@code --mcp-config}), and let the tools
+         * named in {@code allowed} run without asking ({@code --allowedTools}). The CLI's own MCP servers are kept.
+         *
+         * <p>A file rather than the JSON itself, because on Windows {@link ProcessBuilder} passes an argument's
+         * double quotes through unescaped and the CLI's runtime then drops them, so inline JSON arrives broken.
+         */
+        public Options withMcpServer(Path config, List<String> allowed) {
+            List<String> args = new ArrayList<>(extraArgs);
+            args.addAll(List.of("--mcp-config", config.toString()));
+            if (!allowed.isEmpty()) {
+                args.addAll(List.of("--allowedTools", String.join(",", allowed)));
+            }
+            return withExtraArgs(args);
+        }
+
         public Options withExtraArgs(List<String> args) {
             return new Options(executable, workingDirectory, model, permissionMode, appendSystemPrompt,
                     resumeSessionId, args, environment, scrubHostVariables);
@@ -276,6 +292,14 @@ public final class AgentSession implements AutoCloseable {
                 .put("behavior", "deny")
                 .put("message", message)
                 .build());
+    }
+
+    /**
+     * Answer an {@link AgentEvent.McpMessage} with the server's JSON-RPC reply to it. Every message gets one, a
+     * notification included, or the CLI waits on it.
+     */
+    public boolean answerMcp(String requestId, JsonValue reply) {
+        return answer(requestId, JsonValue.Obj.builder().put("mcp_response", reply).build());
     }
 
     /** Answer a {@link AgentEvent.ControlRequest} this code does not handle with an error, rather than silence. */

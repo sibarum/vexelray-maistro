@@ -135,6 +135,7 @@ Read these in this order.
 | `Session.java` | what comes back next time (the panes), in the framework's one settings store. |
 | `Motion.java` | the one tempo every widget moves at, on the framework's clock. |
 | `agent/` | **no `Gui`:** finding the CLI, its stream-json protocol as typed events, a strict JSON reader, the process. |
+| `tools/` | **no `Gui`:** the tools Maistro gives the agent, as an MCP server in this process that the CLI reaches over its own pipes; the read-only ones that look at the other running VexelRay applications through their automation sockets. |
 | `map/` | **no `Gui`:** the concept graph as a value, the `maistro-map` block format and its parser, a deterministic layout that keeps old nodes still. |
 | `chat/` | **no `Gui`:** the transcript and its turns. |
 | `archive/` | **no `Gui`:** a conversation as it is kept, and its JSON, written field by field. |

@@ -90,6 +90,13 @@
             <artifactId>vexelray-gui-automation</artifactId>
             <version>${vexelray-gui.version}</version>
         </dependency>
+        <!-- ottermate's wire, as a library: the agent's tools (tools/) attach to the other running applications'
+             sockets with its AutomationClient. No dependencies of its own; a socket and line I/O. -->
+        <dependency>
+            <groupId>dev.vexelray.gui</groupId>
+            <artifactId>vexelray-gui-automation-cli</artifactId>
+            <version>${vexelray-gui.version}</version>
+        </dependency>
         <!-- Input at the application edge: the tactroller->atchung bridge (brings tactroller-api and
              atchung-core transitively, which is where State and Committer come from). -->
         <dependency>

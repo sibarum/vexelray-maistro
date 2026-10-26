@@ -11,6 +11,11 @@ import dev.vexelray.gui.core.app.Settings;
 import dev.vexelray.gui.core.layout.Length;
 import dev.vexelray.gui.krono.KronoGui;
 import dev.vexelray.gui.widget.TitleBar;
+import dev.vexelray.maistro.tools.AppTools;
+import dev.vexelray.maistro.tools.Apps;
+import dev.vexelray.maistro.tools.McpServer;
+import dev.vexelray.maistro.tools.Toolset;
+import java.util.List;
 import sibarum.tactroller.api.Key;
 import sibarum.tactroller.api.Modifier;
 
@@ -100,7 +105,20 @@ final class Recipes {
                         @Setting(value = "model", def = "") String agentModel,
                         @Setting(value = "permissionMode", def = "default") String permissionMode,
                         @Setting(value = "cwd", def = "") String cwd) {
-        return new Conductor(model, new Conductor.Launch(claude, agentModel, permissionMode, cwd));
+        return new Conductor(model, new Conductor.Launch(claude, agentModel, permissionMode, cwd), toolset());
+    }
+
+    /**
+     * The tools Maistro gives the agent, served from this process over the CLI's own pipes: the read-only ones that
+     * look at the other running VexelRay applications ({@link AppTools}). They run without asking, since none of them
+     * changes anything. Their config file and the pictures {@code shot} passes through live under the application's
+     * home; nothing is written until a process starts. Owned, and closed, by the conductor.
+     */
+    private static Toolset toolset() {
+        AppHome home = AppHome.of(Maistro.APP);
+        AppTools apps = new AppTools(Apps.LOCAL, home.file("shots"));
+        return new Toolset(new McpServer("maistro", Maistro.APP, apps.tools()), home.file("mcp.json"),
+                List.of("apps", "tree", "find", "shot"));
     }
 
     /**

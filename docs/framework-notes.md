@@ -141,3 +141,24 @@ itself. It costs a mark per dash, and the dashes restart at each end rather than
 
 What the framework could do: a `dash(double on, double off)` state on `Sketch`, like `tag`, applied to the lines
 and outlines drawn after it, and passed through to SVG as `stroke-dasharray`.
+
+## FN-11 · A screenshot over the automation socket is a file in the other process, half-written when `ok` 🔬
+
+Maistro's `shot` tool hands the agent a picture of another application's window. The socket's `shot <path>` has
+the *application* write a PNG wherever the path says and answer `ok <path> <n> bytes`; there is no verb that sends
+the picture back on the connection. So `AppTools.shot` makes a file name under Maistro's own home, sends it with
+forward slashes (the other process resolves it), reads the file, and deletes it. That is a disk round trip, a folder
+both processes must be able to write, and a path that has to mean the same thing to both: it would not survive the
+application being on another machine or in a sandbox.
+
+`ok` also comes as soon as the file has *any* bytes (`Automation.shot` polls `target.length() > 0`), so the reader
+can catch it mid-write. `AppTools.complete` waits up to 2 s for the file to end in a PNG's `IEND` chunk before
+taking it. A reader that skipped that would hand the agent a truncated picture as a real one.
+
+A smaller seam, seen in the same work: the client is split over two modules. `AutomationClient` is in
+`vexelray-gui-automation-cli`, while the list of running applications (`Discovery.live()`) is public only in the
+server module, `vexelray-gui-automation`; the CLI's own copy is package-private. A client in another JVM needs both.
+
+What the framework could do: a `shot -` (or `shot base64`) that answers with the PNG on the wire, framed like any
+other reply; and `ok` from the file-writing form only once the file is closed (write to a temporary name, then
+move). Then the reading side needs neither the shared folder nor the wait.
