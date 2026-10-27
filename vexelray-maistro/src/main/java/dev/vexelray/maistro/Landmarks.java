@@ -94,11 +94,23 @@ final class Landmarks {
     /** The focused node's label, empty when nothing is focused: {@code await context.focus KV cache}. */
     static final String CONTEXT_FOCUS = "context.focus";
 
+    /**
+     * The card over the transcript while Claude Code is not signed in, or not found; unshown otherwise. Its title says
+     * which, {@code signin.command} is the command that signs in, and the two buttons copy it and check again.
+     */
+    static final String SIGN_IN = "signin";
+    static final String SIGN_IN_TITLE = "signin.title";
+    static final String SIGN_IN_COMMAND = "signin.command";
+    static final String SIGN_IN_COPY = "signin.copy";
+    static final String SIGN_IN_CHECK = "signin.check";
+
     /** The status line, and its slots. */
     static final String STATUS = "status";
     static final String STATUS_AGENT = "status.agent";
     static final String STATUS_MESSAGE = "status.message";
     static final String STATUS_MODEL = "status.model";
+    /** Whether Claude Code is signed in: {@code await status.account signed in}. */
+    static final String STATUS_ACCOUNT = "status.account";
 
     private Landmarks() {
     }

@@ -10,6 +10,12 @@ longer list this is drawn from.
 
 ## Next
 
+- [ ] Signing in (guide, *Signing in*), after the status check and card: sign in from the card's button
+      (`claude auth login`, with Cancel; find out whether it needs a terminal or a pasted code), mid-session
+      `authentication_failed` turning the account to signed out, and the account in Settings with Sign out.
+- [ ] Record `claude auth status --json` from a signed-in CLI into `src/test/resources/agent/` and test the parser
+      on it; only the signed-out shape has been seen.
+
 - [ ] On Windows every double quote in a CLI argument is dropped (`ProcessBuilder` passes it unescaped), so
       `--append-system-prompt` reaches the CLI with `MapProtocol.INSTRUCTIONS`' quotes gone. `--mcp-config` sidesteps it
       with a file; the prompt does not yet.
@@ -19,7 +25,7 @@ longer list this is drawn from.
       prompt.
 - [ ] The relay ends an interrupted turn as `error_during_execution`, a guess: record what a logged-in CLI sends.
 - [ ] See a real reply drawn on the map. The pipeline is tested headless, and seen end to end only as far as the
-      CLI's "Not logged in": the desktop app's bundled `claude.exe` needs its own `/login`.
+      CLI's "Not logged in": the desktop app's bundled `claude.exe` needs `claude auth login` once.
 - [ ] Record a real `can_use_tool` request from a logged-in run into `src/test/resources/agent/` and test the
       parser on it, and see the CLI apply an `updatedPermissions` answer and stop asking. Both shapes are the Agent
       SDK's documented ones and have not been seen from this CLI yet.

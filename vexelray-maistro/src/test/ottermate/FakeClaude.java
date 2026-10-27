@@ -24,6 +24,10 @@ import java.util.Map;
 public class FakeClaude {
 
     public static void main(String[] args) throws IOException {
+        if (args[0].equals(SIGNED_OUT_ONCE)) {
+            authStatus(Path.of(args[1]));
+            return;
+        }
         List<String> all = Files.readAllLines(Path.of(args[0]), StandardCharsets.UTF_8);
         Path heard = Path.of(args[1]);
         Files.createDirectories(heard.toAbsolutePath().getParent());
@@ -76,6 +80,26 @@ public class FakeClaude {
      * for every other message.
      */
     private static final String WHEN = "#when ";
+
+    /**
+     * In place of the turn: answer {@code claude auth status --json} signed out the first time one Maistro asks, and
+     * signed in every time after, as if {@code claude auth login} had been run in between. Which Maistro is asking is
+     * the grandparent process (Maistro, then {@code cmd.exe}, then this), kept with the count in {@code file}.
+     */
+    private static final String SIGNED_OUT_ONCE = "--auth-status-signed-out-once";
+
+    private static void authStatus(Path file) throws IOException {
+        long maistro = ProcessHandle.current().parent().flatMap(ProcessHandle::parent).map(ProcessHandle::pid)
+                .orElse(-1L);
+        boolean asked = Files.exists(file)
+                && Files.readString(file, StandardCharsets.UTF_8).strip().equals(Long.toString(maistro));
+        Files.createDirectories(file.toAbsolutePath().getParent());
+        Files.writeString(file, Long.toString(maistro), StandardCharsets.UTF_8);
+        System.out.println(asked
+                ? "{\"loggedIn\": true, \"authMethod\": \"fake\"}"
+                : "{\"loggedIn\": false, \"authMethod\": \"none\"}");
+        System.exit(asked ? 0 : 1);
+    }
 
     /** Read until a line of {@code type}; false if the input closed first. */
     private static boolean awaitLine(BufferedReader in, Path heard, String type) throws IOException {

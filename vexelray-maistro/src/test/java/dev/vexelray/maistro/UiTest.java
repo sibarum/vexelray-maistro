@@ -520,6 +520,45 @@ class UiTest {
     }
 
     @Test
+    void untilTheAccountIsKnownAMessageIsHeldNotSent() {
+        assertEquals(Doc.Account.State.CHECKING, wiring.model().doc().account().state(), "a tree built headless "
+                + "never checks, so it stays checking, and sending here starts no process");
+        Conductor c = wiring.conductor();
+        c.send("hello");
+        Doc doc = wiring.model().doc();
+        Turn said = doc.transcript().last();
+        assertEquals(Turn.Who.HUMAN, said.who());
+        assertEquals(List.of(Doc.Account.HELD), said.chips());
+        assertFalse(doc.busy(), "a held message is not a turn in progress");
+        assertEquals(Conductor.WAITING_FOR_SIGN_IN, doc.activity());
+        assertTrue(c.restart(), "and it does not hold off a new conversation");
+    }
+
+    @Test
+    void signedOutShowsTheCardAndItsCommand() {
+        wiring.model().change(d -> d.withAccount(a -> new Doc.Account(Doc.Account.State.SIGNED_OUT, "",
+                "C:/x/claude.exe", "")));
+        Doc doc = wiring.model().doc();
+        assertEquals("signed out", doc.account().says());
+        assertTrue(doc.account().state().holds());
+        assertTrue(doc.account().state().card());
+        assertEquals("C:/x/claude.exe auth login", ConversationPane.signInCommand("C:/x/claude.exe"));
+        assertEquals("& \"C:/Program Files/claude.exe\" auth login",
+                ConversationPane.signInCommand("C:/Program Files/claude.exe"));
+        assertEquals("signed in · claude.ai",
+                new Doc.Account(Doc.Account.State.SIGNED_IN, "claude.ai", "", "").says());
+    }
+
+    @Test
+    void aMessageSavedWhileHeldIsNotHeldWhenResumed() {
+        wiring.conductor().send("hello");
+        dev.vexelray.maistro.archive.Conversation saved = Archive.conversation(wiring.model().doc());
+        assertTrue(wiring.conductor().restart());
+        assertTrue(wiring.conductor().resume(saved));
+        assertTrue(wiring.model().doc().transcript().last().chips().isEmpty());
+    }
+
+    @Test
     void aToolCallIsDescribedByWhatItActsOn() {
         assertEquals("src/Main.java", Conductor.describe("Read", Json.parse("{\"file_path\":\"src/Main.java\"}")));
         assertEquals("{\"x\":1}", Conductor.describe("Other", Json.parse("{\"x\":1}")));

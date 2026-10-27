@@ -113,6 +113,31 @@ separate from the conversation's concept map. When storage is full, evict settle
 - Every claim links to its evidence (frame or readout). A visible stuck state shows what has been tried. One lane
   per app so work does not block on one.
 
+### Signing in (2026-10-27)
+
+Not on the canvas. Maistro has no account of its own; it runs whatever Claude Code CLI it finds, and that CLI's
+credentials (in its config directory, `~/.claude`, shared by every copy of the CLI on the machine) are the account.
+The CLI manages them without its terminal UI: `claude auth status --json` (`{"loggedIn": false, "authMethod":
+"none", ...}`, exit code 1 when signed out), `claude auth login [--claudeai | --console | --sso]` and
+`claude auth logout`.
+
+- **Check before the first message, not after it fails.** At startup a worker runs `auth status` on the CLI it found.
+  The session's account is *checking*, *signed in (method)*, *signed out* or *no CLI (reason)*, and the title bar's
+  status line says which.
+- **Signed out shows a card, not an error.** In place of the empty transcript: "Claude Code isn't signed in", the
+  CLI's path, and how to sign in. The composer stays usable: a message sent while signed out is kept, marked "sends
+  once you're signed in", and goes out when sign-in is seen. Signing in never gates writing.
+- **Signing in happens in the browser.** The card's button runs `auth login` (the subscription by default, a
+  Console account as the alternative) as its own process; the card waits with a Cancel, then checks again.
+- **Losing it mid-session** (the CLI's `authentication_failed` error) turns the account to signed out and shows
+  the same card, keeping the failed message to resend, instead of two red notes.
+- **Settings shows the account**: method, CLI path, Sign out. A key from the environment is shown, not offered
+  for change.
+
+Slices, in order: the status check, card and kept message (the card says what to run); sign-in from the button;
+mid-session expiry; the Settings view. Not yet known: whether `auth login` works with no terminal (it may ask for a
+pasted code), and what `auth status --json` says when signed in.
+
 ### Open questions
 
 - **Node canonicalization:** raw UI-tree hashes are too fine (a blinking cursor makes a new state). States must

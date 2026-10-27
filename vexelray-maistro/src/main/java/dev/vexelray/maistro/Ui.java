@@ -45,9 +45,11 @@ final class Ui {
                 .slot(Landmarks.STATUS_AGENT, StatusBar.Side.LEFT, "")
                 .slot(Landmarks.STATUS_MESSAGE, StatusBar.Side.LEFT, "")
                 .slot(Landmarks.STATUS_MODEL, StatusBar.Side.RIGHT, "")
+                .slot(Landmarks.STATUS_ACCOUNT, StatusBar.Side.RIGHT, "")
                 .minWidth(Landmarks.STATUS_AGENT, Length.rem(9));
         gui.landmark(Landmarks.STATUS, status.node());
-        for (String slot : new String[] {Landmarks.STATUS_AGENT, Landmarks.STATUS_MESSAGE, Landmarks.STATUS_MODEL}) {
+        for (String slot : new String[] {Landmarks.STATUS_AGENT, Landmarks.STATUS_MESSAGE, Landmarks.STATUS_MODEL,
+                Landmarks.STATUS_ACCOUNT}) {
             gui.landmark(slot, status.slot(slot));
         }
 
@@ -90,6 +92,7 @@ final class Ui {
         conversation.showStrands(doc.strands(), doc.shown().id());
         conversation.show(doc.transcript());
         conversation.showLibrary(doc.library());
+        conversation.showAccount(doc.account());
         conversation.showAnchor(doc.mind().anchorNode().map(dev.vexelray.maistro.map.Node::shownLabel).orElse(""));
         context.show(doc.agent());
         context.showTotals(doc.totals(), doc.strands().size());
@@ -98,5 +101,6 @@ final class Ui {
         status.text(Landmarks.STATUS_AGENT, "agent: " + doc.activity());
         status.text(Landmarks.STATUS_MESSAGE, doc.status());
         status.text(Landmarks.STATUS_MODEL, doc.agent().model());
+        status.text(Landmarks.STATUS_ACCOUNT, doc.account().says());
     }
 }

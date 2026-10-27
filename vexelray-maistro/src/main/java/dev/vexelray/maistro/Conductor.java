@@ -2,7 +2,9 @@ package dev.vexelray.maistro;
 
 import dev.vexelray.maistro.agent.AgentEvent;
 import dev.vexelray.maistro.agent.AgentListener;
+import dev.vexelray.maistro.agent.AgentProcess;
 import dev.vexelray.maistro.agent.AgentSession;
+import dev.vexelray.maistro.agent.AuthStatus;
 import dev.vexelray.maistro.agent.ClaudeCli;
 import dev.vexelray.maistro.agent.JsonValue;
 import dev.vexelray.maistro.agent.Suggestion;
@@ -24,6 +26,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
 import java.util.function.UnaryOperator;
@@ -80,6 +84,9 @@ final class Conductor implements AutoCloseable {
             ottermate through the shell (C:/Users/User/Documents/GitHub/vexelray-gui/vexelray-gui-automation-cli/ottermate, \
             guide at vexelray-gui/docs/guides/ottermate.md).""";
 
+    /** What a strand is doing while its messages are kept back until Claude Code is signed in. */
+    static final String WAITING_FOR_SIGN_IN = "waiting for sign-in";
+
     /** What the agent is told when the human says no. */
     static final String DENIED = "The human denied this in Maistro. Do not retry it; ask what they want instead.";
 
@@ -90,6 +97,7 @@ final class Conductor implements AutoCloseable {
     private final Launch launch;
     private final Toolset toolset;
     private final Map<String, Lane> lanes = new ConcurrentHashMap<>();
+    private final AtomicLong checks = new AtomicLong();
 
     Conductor(Model model, Launch launch, Toolset toolset) {
         this.model = model;
@@ -116,6 +124,38 @@ final class Conductor implements AutoCloseable {
     /** Say {@code text} in the strand on screen. */
     void send(String text) {
         shownLane().send(text);
+    }
+
+    /**
+     * Ask the CLI whether it is signed in ({@code claude auth status}), and let the messages kept back go once
+     * nothing more is to be waited for: signed in, no CLI to wait on, or a CLI that did not say. Signed out, they stay
+     * kept. Blocks for as long as the CLI takes to answer, so it runs on the offload lane, never on a handler.
+     */
+    void checkAccount() {
+        // Two checks may overlap (startup, and Check again pressed at once); only the last one started may answer.
+        long n = checks.incrementAndGet();
+        model.change(d -> d.withAccount(Doc.Account::checking));
+        ClaudeCli.Result found = ClaudeCli.locate(launch.claude());
+        Doc.Account account;
+        if (found.isFound()) {
+            Path exe = found.location().orElseThrow().executable();
+            AuthStatus s = AuthStatus.check(exe, AgentSession.Options.of(exe).childEnvironment(System.getenv()),
+                    AgentProcess.SYSTEM);
+            Doc.Account.State state = !s.known() ? Doc.Account.State.UNKNOWN
+                    : s.signedIn() ? Doc.Account.State.SIGNED_IN : Doc.Account.State.SIGNED_OUT;
+            account = new Doc.Account(state, s.signedIn() ? s.method() : "", exe.toString(), s.detail());
+        } else {
+            account = new Doc.Account(Doc.Account.State.NO_CLI, "", "", found.reason());
+        }
+        if (checks.get() != n) {
+            return;
+        }
+        model.change(d -> d.withAccount(a -> account));
+        if (!account.state().holds()) {
+            for (Lane l : new ArrayList<>(lanes.values())) {
+                l.release();
+            }
+        }
     }
 
     /** Stop the turn in progress in the strand on screen. */
@@ -323,6 +363,9 @@ final class Conductor implements AutoCloseable {
         /** Tool turn id to the permission request it waits on: what answering it needs. */
         private final Map<Long, Asked> asks = new ConcurrentHashMap<>();
 
+        /** Messages said while the account was not known to be signed in, as they will be sent; see {@link #send}. */
+        private final List<String> held = new ArrayList<>();
+
         private AgentSession session;
         private String lastSessionId = "";
         /** Which of this lane's processes is current; events from an older one are dropped. */
@@ -359,10 +402,17 @@ final class Conductor implements AutoCloseable {
          * that lets it go, so a click landing meanwhile is either in this message or kept for the next. A commit's
          * function may run more than once, and the last run is the one committed, so the prompt it leaves is the one
          * that matches the transcript.
+         *
+         * <p>While the account is not known to be signed in ({@link Doc.Account.State#holds}), the message is shown
+         * wearing {@link Doc.Account#HELD} and kept, prompt and all, and {@link #release} sends it later. Whether to
+         * hold is read in the same commit, so a sign-in landing meanwhile either finds the message kept or never
+         * sees it held.
          */
         void send(String text) {
             AtomicReference<String> prompt = new AtomicReference<>(text);
+            AtomicBoolean hold = new AtomicBoolean();
             update((d, s) -> {
+                hold.set(d.account().state().holds());
                 Optional<Node> from = d.mind().anchorNode();
                 String body = from.map(n -> fromNode(d.mind().graph(), n, text)).orElse(text);
                 if (!s.news().isEmpty()) {
@@ -375,19 +425,57 @@ final class Conductor implements AutoCloseable {
                     int n = s.news().size();
                     chips.add("told · " + n + (n == 1 ? " merged branch" : " merged branches"));
                 }
+                if (hold.get()) {
+                    chips.add(Doc.Account.HELD);
+                }
                 Doc next = d.withStrand(id, x -> x.withTranscript(t -> t.append(n -> Turn.human(n, text)
-                        .withChips(chips))).withActivity("thinking", true).told());
+                                .withChips(chips)))
+                        .withActivity(hold.get() ? WAITING_FOR_SIGN_IN : "thinking", !hold.get()).told());
                 return s.isMain()
                         ? next.withMind(Doc.Mind::spoke).withMeta(m -> m.titled(text))
                         : next.withMind(Doc.Mind::unanchored);
             });
+            if (hold.get()) {
+                synchronized (this) {
+                    held.add(prompt.get());
+                }
+                // The check may have answered between that commit and this keep, and found nothing kept yet.
+                if (!model.doc().account().state().holds()) {
+                    release();
+                }
+                return;
+            }
+            sendNow(List.of(prompt.get()));
+        }
+
+        /**
+         * Send the messages kept back while the account was not known to be signed in, in the order they were said,
+         * and take the {@link Doc.Account#HELD} chips off. Does nothing when none are kept.
+         */
+        void release() {
+            List<String> out;
+            synchronized (this) {
+                if (held.isEmpty()) {
+                    return;
+                }
+                out = List.copyOf(held);
+                held.clear();
+            }
+            strand(x -> x.withTranscript(t -> t.without(Doc.Account.HELD)).withActivity("thinking", true));
+            sendNow(out);
+        }
+
+        private void sendNow(List<String> prompts) {
             AgentSession s = sessionOrStart();
             if (s == null) {
                 strand(x -> x.withActivity("not started", false));
                 return;
             }
-            if (!s.send(prompt.get())) {
-                failed("Could not write to Claude Code: its process has gone.");
+            for (String p : prompts) {
+                if (!s.send(p)) {
+                    failed("Could not write to Claude Code: its process has gone.");
+                    return;
+                }
             }
         }
 
@@ -450,6 +538,7 @@ final class Conductor implements AutoCloseable {
                 s = session;
                 session = null;
                 generation++;
+                held.clear();
             }
             tools.clear();
             asks.clear();

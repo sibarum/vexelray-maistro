@@ -43,9 +43,10 @@ import java.util.function.UnaryOperator;
  * @param status  the last thing the status line was told
  * @param meta    which conversation this is: its id, title and when it started
  * @param library the list of saved conversations, when it is open
+ * @param account whether Claude Code is signed in
  */
 record Doc(List<Strand> strands, String showing, Panes panes, Mind mind, String status, Meta meta,
-           Library library) {
+           Library library, Account account) {
 
     /** The main strand's id. */
     static final String MAIN = "main";
@@ -198,14 +199,14 @@ record Doc(List<Strand> strands, String showing, Panes panes, Mind mind, String 
         for (Strand s : strands) {
             next.add(s.id().equals(id) ? change.apply(s) : s);
         }
-        return new Doc(next, showing, panes, mind, status, meta, library);
+        return new Doc(next, showing, panes, mind, status, meta, library, account);
     }
 
     /** Add a branch, and show it. */
     Doc withBranch(Strand branch) {
         List<Strand> next = new java.util.ArrayList<>(strands);
         next.add(branch);
-        return new Doc(next, branch.id(), panes, mind, status, meta, library);
+        return new Doc(next, branch.id(), panes, mind, status, meta, library, account);
     }
 
     /** Take branch {@code id} away, its staged map with it, and show the main strand if it was on screen. */
@@ -215,12 +216,12 @@ record Doc(List<Strand> strands, String showing, Panes panes, Mind mind, String 
         }
         List<Strand> next = new java.util.ArrayList<>(strands);
         next.removeIf(s -> s.id().equals(id));
-        return new Doc(next, showing.equals(id) ? MAIN : showing, panes, mind, status, meta, library);
+        return new Doc(next, showing.equals(id) ? MAIN : showing, panes, mind, status, meta, library, account);
     }
 
     /** Put strand {@code id} on screen; unchanged if there is no such strand. */
     Doc showing(String id) {
-        return strand(id).isPresent() ? new Doc(strands, id, panes, mind, status, meta, library) : this;
+        return strand(id).isPresent() ? new Doc(strands, id, panes, mind, status, meta, library, account) : this;
     }
 
     /** An id for the next branch: one past the highest in use. */
@@ -439,31 +440,97 @@ record Doc(List<Strand> strands, String showing, Panes panes, Mind mind, String 
         }
     }
 
-    static Doc initial() {
-        return new Doc(List.of(Strand.MAIN_EMPTY), MAIN, Panes.ALL, Mind.EMPTY, "",
-                Meta.startingAt(System.currentTimeMillis()), Library.CLOSED);
+    /**
+     * Whether Claude Code is signed in, as far as Maistro knows: asked of the CLI at startup and on Check again
+     * ({@code claude auth status}), and the same for every strand, since every strand runs the same CLI.
+     *
+     * @param state  what is known
+     * @param method how it is signed in, as the CLI says it ({@code claude.ai}, ...); empty when it did not say
+     * @param cli    the CLI that was asked; empty until one was found
+     * @param detail why nothing is known, or why there is no CLI; empty otherwise
+     */
+    record Account(State state, String method, String cli, String detail) {
+
+        static final Account CHECKING = new Account(State.CHECKING, "", "", "");
+
+        /** The chip on a message kept back until Claude Code is signed in. */
+        static final String HELD = "held · sends once Claude Code is signed in";
+
+        /**
+         * What is known, with what follows from it on the constant rather than in a switch: what the status line
+         * says, whether a message is kept back, and whether the conversation shows the sign-in card.
+         */
+        enum State {
+            CHECKING("checking sign-in", true, false),
+            SIGNED_IN("signed in", false, false),
+            SIGNED_OUT("signed out", true, true),
+            /** No CLI was found; a message goes on to say so, as it did before there was a check. */
+            NO_CLI("Claude Code not found", false, true),
+            /** The CLI did not say (too old, too slow, or it could not be run); nothing is kept back. */
+            UNKNOWN("sign-in unknown", false, false);
+
+            private final String says;
+            private final boolean holds;
+            private final boolean card;
+
+            State(String says, boolean holds, boolean card) {
+                this.says = says;
+                this.holds = holds;
+                this.card = card;
+            }
+
+            /** A message sent now is kept back, to go when the account is signed in. */
+            boolean holds() {
+                return holds;
+            }
+
+            /** The conversation shows the card saying what is wrong and what to do. */
+            boolean card() {
+                return card;
+            }
+        }
+
+        /** What the status line says: {@code signed in · claude.ai}, {@code signed out}, ... */
+        String says() {
+            return state == State.SIGNED_IN && !method.isEmpty() ? state.says + " · " + method : state.says;
+        }
+
+        /** Checking again, with the CLI last asked kept for the card. */
+        Account checking() {
+            return new Account(State.CHECKING, "", cli, "");
+        }
     }
 
-    /** A new conversation: nothing said, no map, no agent, and the panes as they are. */
+    static Doc initial() {
+        return new Doc(List.of(Strand.MAIN_EMPTY), MAIN, Panes.ALL, Mind.EMPTY, "",
+                Meta.startingAt(System.currentTimeMillis()), Library.CLOSED, Account.CHECKING);
+    }
+
+    /** A new conversation: nothing said, no map, no agent, and the panes and the account as they are. */
     Doc restarted() {
-        return initial().withPanes(panes).withStatus("New conversation");
+        return initial().withPanes(panes).withAccount(a -> account).withStatus("New conversation");
     }
 
     /**
-     * Conversation {@code c}, as it was saved, with the panes as they are and the list closed. The agent is not
-     * running; the next message starts it with {@code --resume}.
+     * Conversation {@code c}, as it was saved, with the panes and the account as they are and the list closed. The
+     * agent is not running; the next message starts it with {@code --resume}. A message saved while it was held back
+     * is not held any more (nothing is keeping it), so it loses that chip.
      */
     Doc resumed(Conversation c) {
         List<Strand> next = new java.util.ArrayList<>();
-        next.add(new Strand(MAIN, "", "Main", c.transcript(), "not started", false, info(c.agent()),
-                MapGraph.EMPTY, c.news()));
+        next.add(new Strand(MAIN, "", "Main", c.transcript().without(Account.HELD), "not started", false,
+                info(c.agent()), MapGraph.EMPTY, c.news()));
         for (Conversation.Branch b : c.branches()) {
-            next.add(new Strand(b.id(), b.from(), b.label(), b.transcript(), "not started", false, info(b.agent()),
-                    b.graph(), List.of()));
+            next.add(new Strand(b.id(), b.from(), b.label(), b.transcript().without(Account.HELD), "not started",
+                    false, info(b.agent()), b.graph(), List.of()));
         }
         return new Doc(next, MAIN, panes, new Mind(c.graph(), c.positions(), c.mindTurn(), ""),
                 "Resumed: " + (c.title().isEmpty() ? "(untitled)" : c.title()),
-                new Meta(c.id(), c.title(), c.started()), Library.CLOSED);
+                new Meta(c.id(), c.title(), c.started()), Library.CLOSED, account);
+    }
+
+    Doc withAccount(UnaryOperator<Account> change) {
+        return new Doc(strands, showing, panes, mind, status, meta, library, change.apply(account));
     }
 
     private static AgentInfo info(Conversation.Agent a) {
@@ -472,22 +539,22 @@ record Doc(List<Strand> strands, String showing, Panes panes, Mind mind, String 
     }
 
     Doc withMeta(UnaryOperator<Meta> change) {
-        return new Doc(strands, showing, panes, mind, status, change.apply(meta), library);
+        return new Doc(strands, showing, panes, mind, status, change.apply(meta), library, account);
     }
 
     Doc withLibrary(UnaryOperator<Library> change) {
-        return new Doc(strands, showing, panes, mind, status, meta, change.apply(library));
+        return new Doc(strands, showing, panes, mind, status, meta, change.apply(library), account);
     }
 
     Doc withPanes(Panes value) {
-        return new Doc(strands, showing, value, mind, status, meta, library);
+        return new Doc(strands, showing, value, mind, status, meta, library, account);
     }
 
     Doc withMind(UnaryOperator<Mind> change) {
-        return new Doc(strands, showing, panes, change.apply(mind), status, meta, library);
+        return new Doc(strands, showing, panes, change.apply(mind), status, meta, library, account);
     }
 
     Doc withStatus(String value) {
-        return new Doc(strands, showing, panes, mind, value, meta, library);
+        return new Doc(strands, showing, panes, mind, value, meta, library, account);
     }
 }

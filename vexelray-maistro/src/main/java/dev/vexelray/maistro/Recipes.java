@@ -144,7 +144,11 @@ final class Recipes {
     }
 
     /**
-     * Bring back last time's panes, start keeping conversations, and put the keyboard in the composer.
+     * Bring back last time's panes, start keeping conversations, ask Claude Code whether it is signed in, and put the
+     * keyboard in the composer.
+     *
+     * <p>The sign-in check is here, not in the conductor's recipe, because it runs a process, which a tree built
+     * headless for a test must not.
      *
      * <p>Takes the {@code Shell} to be last: restoring writes settings and the archive writes conversations, which a
      * tree built headless for a test must not, and the {@code Shell} is the framework's last-phase value.
@@ -156,6 +160,7 @@ final class Recipes {
     Started start(Shell shell, Actions actions, Session session, Ui ui, Archive archive) {
         session.restore();
         archive.arm();
+        actions.checkAccount();
         ui.conversation().focusComposer();
         return new Started();
     }

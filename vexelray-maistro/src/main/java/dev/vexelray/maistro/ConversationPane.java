@@ -78,6 +78,18 @@ final class ConversationPane {
     private List<Summary> listed = List.of();
     private volatile Consumer<Summary> resume = s -> { };
 
+    private Node signInWrap;
+    private Node signInCard;
+    private Node signInTitle;
+    private Node signInBody;
+    private Node signInCommand;
+    private Node signInCommandBox;
+    private Node signInFoot;
+    private Button copy;
+    /** The account the card last said something about, so checking again keeps the card up. */
+    private volatile Doc.Account shownAccount;
+    private volatile Runnable checkAccount = () -> { };
+
     private volatile Consumer<String> send = text -> { };
     private volatile Answer answer = (turn, allow) -> { };
 
@@ -167,8 +179,92 @@ final class ConversationPane {
                 .background(gui.theme().color(Role.PANEL))
                 .border(Length.dp(1), Look.RULE)
                 .alignItems(AlignItems.STRETCH)
-                .children(header(gui, "CONVERSATION"), strandBar(), transcript, library(), from, composerRow);
+                .children(header(gui, "CONVERSATION"), strandBar(), signIn(), transcript, library(), from,
+                        composerRow);
         gui.landmark(Landmarks.CONVERSATION, root);
+    }
+
+    /**
+     * Over the transcript while Claude Code is not signed in, or not found: what is wrong, the command that puts it
+     * right, and Check again. Not an error in the transcript, since nothing has failed yet, and not in the way of
+     * the composer: a message sent meanwhile is kept until it can go. Built once; {@link #showAccount} fills it.
+     */
+    private Node signIn() {
+        signInTitle = gui.text("").font(Type.UI).textSize(Type.BODY).textColor(gui.theme().color(Role.INK))
+                .wordWrap(true).width(Length.FILL);
+        gui.landmark(Landmarks.SIGN_IN_TITLE, signInTitle);
+        signInBody = gui.text("").font(Type.UI).textSize(Type.BODY).textColor(gui.theme().color(Role.DIM))
+                .wordWrap(true).width(Length.FILL);
+        signInCommand = gui.text("").font(Type.MONO).textSize(Type.CODE).textColor(gui.theme().color(Role.INK))
+                .wordWrap(true).width(Length.FILL);
+        signInCommandBox = gui.row()
+                .width(Length.FILL)
+                .padding(Type.TIGHT, Type.TIGHT)
+                .corner(Length.dp(4))
+                .background(gui.theme().color(Role.RAISED))
+                .children(signInCommand);
+        gui.landmark(Landmarks.SIGN_IN_COMMAND, signInCommand);
+        Button check = new Button(gui, "Check again").kind(Button.Kind.PRIMARY).onPress(() -> checkAccount.run());
+        gui.landmark(Landmarks.SIGN_IN_CHECK, check.node());
+        copy = new Button(gui, "Copy command").kind(Button.Kind.SECONDARY)
+                .onPress(() -> gui.clipboard().set(signInCommand(shownAccount == null ? "" : shownAccount.cli())));
+        gui.landmark(Landmarks.SIGN_IN_COPY, copy.node());
+        signInFoot = gui.text("Messages you send meanwhile are kept, and go out once it is signed in.")
+                .font(Type.UI).textSize(Type.BODY).textColor(gui.theme().color(Role.FAINT))
+                .wordWrap(true).width(Length.FILL);
+        signInCard = gui.column()
+                .width(Length.FILL)
+                .padding(Type.GUTTER, Type.GUTTER)
+                .gap(Type.TIGHT)
+                .alignItems(AlignItems.STRETCH)
+                .border(Length.dp(1), gui.theme().color(Role.ACCENT))
+                .corner(Length.dp(6))
+                .children(signInTitle, signInBody, signInCommandBox,
+                        gui.row().gap(Type.TIGHT).alignItems(AlignItems.CENTER).children(check.node(), copy.node()),
+                        signInFoot);
+        gui.landmark(Landmarks.SIGN_IN, signInCard);
+        signInWrap = gui.column()
+                .width(Length.FILL)
+                .padding(Type.TIGHT, Type.GUTTER)
+                .alignItems(AlignItems.STRETCH)
+                .children(signInCard)
+                .visible(false);
+        return signInWrap;
+    }
+
+    /** What Check again does. */
+    void onCheckAccount(Runnable handler) {
+        this.checkAccount = handler;
+    }
+
+    /** Show the sign-in card for {@code a}, or hide it. */
+    synchronized void showAccount(Doc.Account a) {
+        boolean out = a.state() == Doc.Account.State.SIGNED_OUT;
+        boolean checking = a.state() == Doc.Account.State.CHECKING;
+        boolean shown = a.state().card() || checking && shownAccount != null && shownAccount.state().card();
+        signInWrap.visible(shown);
+        if (checking || !shown) {
+            // Checking again leaves the card as it was, so it does not blink away and back.
+            return;
+        }
+        shownAccount = a;
+        signInTitle.text(out ? "Claude Code isn't signed in" : "Maistro needs Claude Code");
+        signInBody.text(out
+                ? "Maistro runs Claude Code as it is set up on this machine, and it has no account yet. Sign in once"
+                        + " from a terminal, with the command below; every copy of Claude Code here shares it. Then"
+                        + " press Check again."
+                : "Claude Code was not found: " + a.detail() + ".");
+        signInCommand.text(out ? signInCommand(a.cli()) : "");
+        signInCommandBox.visible(out);
+        copy.node().visible(out);
+        signInFoot.visible(out);
+    }
+
+
+    /** The command that signs {@code cli} in, quoted only where it must be, so it pastes into cmd and PowerShell. */
+    static String signInCommand(String cli) {
+        String exe = cli.isEmpty() ? "claude" : cli;
+        return (exe.contains(" ") ? "& \"" + exe + "\"" : exe) + " auth login";
     }
 
     /**

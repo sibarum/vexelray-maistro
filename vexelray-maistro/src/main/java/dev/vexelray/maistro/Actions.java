@@ -32,6 +32,15 @@ final class Actions {
         ui.conversation().onResume(this::resume);
         ui.conversation().onStrands(conductor::show, this::merge, conductor::abandon);
         ui.context().onBranch(this::branch);
+        ui.conversation().onCheckAccount(this::checkAccount);
+    }
+
+    /**
+     * Ask Claude Code whether it is signed in, on the offload lane: it is a process to wait on, and a handler must
+     * not wait. At startup, and on Check again.
+     */
+    void checkAccount() {
+        gui.offload().execute(conductor::checkAccount);
     }
 
     /**

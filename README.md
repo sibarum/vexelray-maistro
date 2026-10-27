@@ -18,8 +18,10 @@ mvn compile exec:exec
 last left it, at 1440x900 the first time, with the panes you last had up.
 
 Maistro needs a Claude Code CLI that is logged in. It looks for `claude.exe` on `PATH`, then for the copy the Claude
-desktop app keeps under `%APPDATA%\Claude\claude-code\`, then in `~/.local/bin`. That bundled copy is not logged in
-on its own: run it once with `/login`, or name another with `--claude`.
+desktop app keeps under `%APPDATA%\Claude\claude-code\`, then in `~/.local/bin`. At startup it asks that CLI
+(`claude auth status`); signed out, the conversation shows a card with the command that signs it in
+(`<that claude.exe> auth login`, once, in a terminal) and Check again, and a message sent meanwhile is held until then.
+The bundled copy is signed out until you do that, or name another with `--claude`.
 
 ```
 mvn compile exec:exec "-Dapp.args=--claude=C:/path/claude.exe"   # which CLI to run
@@ -264,6 +266,14 @@ once:
 
 ```
 ottermate --script src/test/ottermate/permission.txt --launch mvn.cmd compile exec:exec -Dautomation=0 "-Dapp.args=--claude=src/test/ottermate/fake-claude-permission.cmd"
+```
+
+Every stand-in answers `auth status` as signed in, except `fake-claude-signed-out.cmd`, which is signed out the first
+time a Maistro asks and signed in after. `signin.txt` uses it: the sign-in card, a message held, then Check again
+letting it go:
+
+```
+ottermate --script src/test/ottermate/signin.txt --launch mvn.cmd compile exec:exec -Dautomation=0 "-Dapp.args=--claude=src/test/ottermate/fake-claude-signed-out.cmd"
 ```
 
 A replay can answer some messages differently: a `#when <text>` line starts the lines played instead when a message

@@ -1,0 +1,16 @@
+await status.account signed out
+await signin.title isn't signed in
+settle
+shot target/signin-card.png
+click composer
+type Hello while signed out
+key ENTER
+await status.agent waiting for sign-in
+settle
+find held
+shot target/signin-held.png
+click signin.check
+await status.account signed in
+await status.agent idle
+settle
+shot target/signin-released.png

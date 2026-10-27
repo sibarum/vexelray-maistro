@@ -37,6 +37,21 @@ public record Transcript(List<Turn> turns, long nextId) {
         return new Transcript(next, nextId);
     }
 
+    /** Take the chip {@code chip} off every turn that wears it. */
+    public Transcript without(String chip) {
+        List<Turn> next = new ArrayList<>(turns.size());
+        for (Turn t : turns) {
+            if (t.chips().contains(chip)) {
+                List<String> kept = new ArrayList<>(t.chips());
+                kept.remove(chip);
+                next.add(t.withChips(kept));
+            } else {
+                next.add(t);
+            }
+        }
+        return new Transcript(next, nextId);
+    }
+
     /** The last turn, or null when there is none. */
     public Turn last() {
         return turns.isEmpty() ? null : turns.getLast();
