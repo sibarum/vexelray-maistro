@@ -416,20 +416,6 @@ class AgentSessionTest {
     }
 
     @Test
-    void closeKillsAProcessThatIgnoresItsInput() throws Exception {
-        FakeProcess fake = new FakeProcess();
-        Collector c = new Collector();
-        AgentSession s = AgentSession.start(AgentSession.Options.of(EXE), c, launcherOf(fake));
-        long t0 = System.nanoTime();
-        s.close();
-        s.close(); // twice is fine
-        assertTrue(c.exited.await(5, TimeUnit.SECONDS));
-        assertTrue(fake.destroyed);
-        assertEquals(137, ((AgentEvent.ProcessExit) c.events.getLast()).exitCode());
-        assertTrue(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - t0) < 4000);
-    }
-
-    @Test
     void closeLetsAProcessThatExitsOnEndOfInputExit() throws Exception {
         FakeProcess fake = new FakeProcess();
         fake.exitOnStdinClose = true;

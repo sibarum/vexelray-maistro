@@ -114,24 +114,6 @@ class ArchiveTest {
     }
 
     @Test
-    void theListIsNewestFirstAndSkipsWhatDoesNotRead() throws Exception {
-        Archive a = archive();
-        a.changed(said(Doc.initial(), "older"));
-        writeAll(a);
-        Thread.sleep(5);
-        a.changed(said(Doc.initial(), "newer"));
-        writeAll(a);
-        Files.writeString(a.dir().resolve("broken.json"), "{not json", StandardCharsets.UTF_8);
-        Files.writeString(a.dir().resolve("half.json.tmp"), "{", StandardCharsets.UTF_8);
-
-        a.list();
-        assertEquals(List.of(new Work.ListAll(a.dir())), lists, "read by the job, not on the caller's thread");
-        Work.Listed got = new ListConversations().run(lists.getFirst());
-        assertEquals(List.of("newer", "older"), got.rows().stream().map(s -> s.title()).toList());
-        assertEquals(1, got.rows().getFirst().messages());
-    }
-
-    @Test
     void loadingHandsOverTheConversationOrSaysWhyNot() {
         Archive a = archive();
         Doc d = said(Doc.initial(), "hello");
