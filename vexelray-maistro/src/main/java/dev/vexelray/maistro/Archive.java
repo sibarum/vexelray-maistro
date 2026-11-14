@@ -5,6 +5,7 @@ import dev.vexelray.maistro.archive.ConversationCodec;
 import dev.vexelray.maistro.archive.Summary;
 import dev.vexelray.maistro.map.Layout;
 import dev.vexelray.maistro.map.MapGraph;
+import sibarum.atchung.Sender;
 import sibarum.probe.Log;
 
 import java.io.IOException;
@@ -17,9 +18,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.function.Consumer;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -30,34 +29,44 @@ import java.util.concurrent.atomic.AtomicLong;
  *
  * <p>On the model's listener, whenever the session is idle and what would be saved differs from what was last
  * saved: so once each time a turn ends, and never while a reply streams in. A conversation with nothing said is not
- * saved. Nothing is written until {@link #arm} — which the last recipe does, so a tree built headless for a test
- * writes nothing — and nothing at all on the listener's thread: the snapshot is handed to the offload lane. The one
- * exception is {@link #close}, which the framework calls as the application ends and which writes the session as it
- * stands, turn or no turn.
+ * saved. Nothing is written until {@link #arm} — which {@link Screen} does once the window is open, so a tree built
+ * headless for a test writes nothing — and nothing at all on the listener's thread: the snapshot is encoded there
+ * and sent to the {@link WriteConversation} job. The one exception is {@link #close}, which the framework calls as the
+ * application ends and which writes the session as it stands, turn or no turn, on its own thread.
  *
  * <h2>Order</h2>
  *
- * <p>Each snapshot is numbered as it is handed over. The offload lane may run two writes of one conversation at
- * once, or in either order, so a write checks, under the lock, that it is still the newest handed over for its
- * conversation, and does nothing if not. The file is written beside its final name and moved over it, so a crash
- * leaves the old file or the new one, never half of one.
+ * <p>The job lane keeps no order between two requests, so one write is out at a time: the next snapshot waits for
+ * the last one's {@link Work.Written}, and only the newest waiting is sent. Each snapshot is numbered as it is handed
+ * over, and a write checks that nothing newer has been written to its file, which keeps {@link #close}'s own write
+ * from being overwritten by one still out on the lane. The file is written beside its final name and moved over it,
+ * so a crash leaves the old file or the new one, never half of one.
  */
 final class Archive implements AutoCloseable {
 
     private static final Log LOG = Log.of("vexelray-maistro.archive");
 
+    /** Snapshot numbers. Process-wide, as the files are: two archives over one folder still agree which is newer. */
+    private static final AtomicLong HANDED = new AtomicLong();
+    /** The newest snapshot number written, per file. */
+    private static final Map<Path, Long> WRITTEN = new ConcurrentHashMap<>();
+
     private final Path dir;
-    private final Executor offload;
-    private final AtomicLong handed = new AtomicLong();
-    /** The newest snapshot number handed over, per conversation id. */
-    private final Map<String, Long> newest = new ConcurrentHashMap<>();
-    private final Object writing = new Object();
+    private final Sender<Work.Write> writes;
+    private final Sender<Work.ListAll> lists;
+    private final Sender<Work.Read> reads;
 
     private volatile boolean armed;
-    /** What was last handed over, to tell a change worth saving from a pane toggle. */
+    /** What was last handed over, to tell a change worth saving from a pane toggle. Guarded by this. */
     private Saved last;
     /** The newest session seen, busy or not: what {@link #close} saves. */
     private volatile Doc latest;
+    /** Whether a write is out on the job lane. Guarded by this. */
+    private boolean out;
+    /** The write out on the job lane, or null. Guarded by this. */
+    private Work.Write sent;
+    /** The newest snapshot waiting for the one out to come back, or null. Guarded by this. */
+    private Work.Write next;
 
     /** What decides whether a session needs saving again; everything in a {@link Conversation} but the times. */
     private record Saved(Doc.Meta meta, List<Doc.Strand> strands, MapGraph graph, Map<String, Layout.Point> positions) {
@@ -67,9 +76,11 @@ final class Archive implements AutoCloseable {
         }
     }
 
-    Archive(Path dir, Executor offload) {
+    Archive(Path dir, Sender<Work.Write> writes, Sender<Work.ListAll> lists, Sender<Work.Read> reads) {
         this.dir = dir;
-        this.offload = offload;
+        this.writes = writes;
+        this.lists = lists;
+        this.reads = reads;
     }
 
     /** The folder the files go in. */
@@ -82,7 +93,7 @@ final class Archive implements AutoCloseable {
         armed = true;
     }
 
-    /** The model's listener: hand the session to the offload lane if a turn has ended with something new in it. */
+    /** The model's listener: send the session to be written if a turn has ended with something new in it. */
     void changed(Doc d) {
         if (!armed) {
             return;
@@ -91,9 +102,35 @@ final class Archive implements AutoCloseable {
         if (d.anyBusy()) {
             return;
         }
-        Handed h = handOver(d);
-        if (h != null) {
-            offload.execute(() -> write(h));
+        Work.Write w = handOver(d);
+        if (w == null) {
+            return;
+        }
+        synchronized (this) {
+            if (out) {
+                next = w;
+                return;
+            }
+            out = true;
+            sent = w;
+        }
+        writes.send(w);
+    }
+
+    /** A write came back: send the one that waited for it, if any. */
+    void written(Work.Written w) {
+        if (!w.problem().isEmpty()) {
+            LOG.warn("could not save conversation {}: {}", w.id(), w.problem());
+        }
+        Work.Write then;
+        synchronized (this) {
+            then = next;
+            next = null;
+            out = then != null;
+            sent = then;
+        }
+        if (then != null) {
+            writes.send(then);
         }
     }
 
@@ -104,20 +141,23 @@ final class Archive implements AutoCloseable {
     @Override
     public void close() {
         Doc d = latest;
-        if (armed && d != null) {
-            Handed h = handOver(d);
-            if (h != null) {
-                write(h);
+        if (!armed || d == null) {
+            return;
+        }
+        Work.Write w = handOver(d);
+        synchronized (this) {
+            // Nothing new since the last hand-over: it may still be waiting, or out on a lane that is stopping.
+            if (w == null) {
+                w = next != null ? next : out ? sent : null;
             }
+        }
+        if (w != null) {
+            write(w);
         }
     }
 
-    /** A snapshot on its way to disk, and its number. */
-    private record Handed(Conversation conversation, long number) {
-    }
-
-    /** Number {@code d} for writing and return it as kept, or null if it is empty or nothing changed. */
-    private synchronized Handed handOver(Doc d) {
+    /** Number {@code d} for writing and return it encoded, or null if it is empty or nothing changed. */
+    private synchronized Work.Write handOver(Doc d) {
         if (d.strands().stream().allMatch(s -> s.transcript().size() == 0)) {
             return null;
         }
@@ -126,9 +166,7 @@ final class Archive implements AutoCloseable {
             return null;
         }
         last = now;
-        long number = handed.incrementAndGet();
-        newest.merge(d.meta().id(), number, Math::max);
-        return new Handed(conversation(d), number);
+        return new Work.Write(dir, d.meta().id(), HANDED.incrementAndGet(), ConversationCodec.encode(conversation(d)));
     }
 
     /** The session as it is kept. */
@@ -151,16 +189,29 @@ final class Archive implements AutoCloseable {
                 a.outputTokens());
     }
 
-    /**
-     * Every saved conversation, newest first, read on the offload lane and handed to {@code done} there. A file that
-     * does not read is left out, and logged.
-     */
-    void list(Consumer<List<Summary>> done) {
-        offload.execute(() -> done.accept(summaries()));
+    /** Ask for every saved conversation; the {@link ListConversations} job answers with {@link Work.Listed}. */
+    void list() {
+        lists.send(new Work.ListAll(dir));
     }
 
-    /** {@link #list}'s work, on the calling thread. Disk I/O: never on the frame loop or a listener. */
-    List<Summary> summaries() {
+    /** Ask for conversation {@code id}; the {@link ReadConversation} job answers with {@link Work.Loaded}. */
+    void load(String id) {
+        reads.send(new Work.Read(dir, id));
+    }
+
+    /** The file conversation {@code id} is kept in. */
+    Path file(String id) {
+        return file(dir, id);
+    }
+
+    private static Path file(Path dir, String id) {
+        return dir.resolve(id + ".json");
+    }
+
+    // ------------------------------------------------------------------ the disk: the jobs', and close's
+
+    /** Every conversation in {@code dir}, newest first. A file that does not read is left out, and logged. */
+    static List<Summary> summaries(Path dir) {
         List<Summary> out = new ArrayList<>();
         if (!Files.isDirectory(dir)) {
             return out;
@@ -180,44 +231,39 @@ final class Archive implements AutoCloseable {
         return out;
     }
 
-    /**
-     * Read conversation {@code id} on the offload lane, and hand it to {@code done} there, or say to {@code failed}
-     * why it could not be.
-     */
-    void load(String id, Consumer<Conversation> done, Consumer<String> failed) {
-        offload.execute(() -> {
-            Path f = file(id);
-            try {
-                done.accept(ConversationCodec.decode(Files.readString(f, StandardCharsets.UTF_8)));
-            } catch (IOException | IllegalArgumentException e) {
-                LOG.warn("could not read conversation {}", f, e);
-                failed.accept("Could not open that conversation: " + e.getMessage());
-            }
-        });
+    /** {@link #summaries(Path)} of this archive's folder. */
+    List<Summary> summaries() {
+        return summaries(dir);
     }
 
-    /** The file conversation {@code id} is kept in. */
-    Path file(String id) {
-        return dir.resolve(id + ".json");
+    /** Conversation {@code r.id()}'s text, or why it could not be read. */
+    static Work.Loaded read(Work.Read r) {
+        Path f = file(r.dir(), r.id());
+        try {
+            return new Work.Loaded(r.id(), Files.readString(f, StandardCharsets.UTF_8), "");
+        } catch (IOException e) {
+            LOG.warn("could not read conversation {}", f, e);
+            return new Work.Loaded(r.id(), "", "Could not open that conversation: " + e.getMessage());
+        }
     }
 
-    private void write(Handed h) {
-        Conversation c = h.conversation();
-        String id = c.id();
-        synchronized (writing) {
-            if (newest.getOrDefault(id, 0L) != h.number()) {
-                return;
-            }
-            Path target = file(id);
-            Path temp = dir.resolve(id + ".json.tmp");
-            try {
-                Files.createDirectories(dir);
-                Files.writeString(temp, ConversationCodec.encode(c), StandardCharsets.UTF_8);
-                Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-                LOG.debug("saved conversation {} to {}", id, target);
-            } catch (IOException e) {
-                LOG.warn("could not save conversation {} to {}", id, target, e);
-            }
+    /** Write {@code w}, unless something newer has been written to its file already. */
+    static synchronized Work.Written write(Work.Write w) {
+        Path dir = w.dir();
+        Path target = file(dir, w.id());
+        if (WRITTEN.getOrDefault(target, 0L) > w.number()) {
+            return new Work.Written(w.id(), w.number(), "");
+        }
+        Path temp = dir.resolve(w.id() + ".json.tmp");
+        try {
+            Files.createDirectories(dir);
+            Files.writeString(temp, w.json(), StandardCharsets.UTF_8);
+            Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            WRITTEN.put(target, w.number());
+            LOG.debug("saved conversation {} to {}", w.id(), target);
+            return new Work.Written(w.id(), w.number(), "");
+        } catch (IOException e) {
+            return new Work.Written(w.id(), w.number(), target + ": " + e);
         }
     }
 }

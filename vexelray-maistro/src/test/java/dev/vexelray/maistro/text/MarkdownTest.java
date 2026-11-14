@@ -1,6 +1,7 @@
 package dev.vexelray.maistro.text;
 
 import dev.vexelray.canvas.Color;
+import dev.vexelray.gui.core.style.Paint;
 import dev.vexelray.gui.core.text.Span;
 import org.junit.jupiter.api.Test;
 
@@ -26,12 +27,12 @@ class MarkdownTest {
 
     private static final Markdown.Style STYLE = new Markdown.Style(HEADING, MARKER, EMPHASIS, LINK, QUOTE, CODE, CODE_BG);
 
-    /** The foreground on {@code needle}'s first character, or null if nothing colours it. */
+    /** The foreground on {@code needle}'s first character, or null if nothing colours it with a colour of its own. */
     private static Color fgOf(String text, String needle) {
         int at = text.indexOf(needle);
         for (Span s : Markdown.spans(text, STYLE)) {
             if (s.fg() != null && s.covers(at)) {
-                return s.fg();
+                return s.fg() instanceof Paint.Fixed f ? f.color() : null;
             }
         }
         return null;

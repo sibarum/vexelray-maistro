@@ -3,6 +3,7 @@ package dev.vexelray.maistro;
 import dev.vexelray.canvas.Color;
 import dev.vexelray.gui.core.Gui;
 import dev.vexelray.gui.core.Node;
+import dev.vexelray.gui.core.NodeEvent;
 import dev.vexelray.gui.core.layout.LayoutEnums.AlignItems;
 import dev.vexelray.gui.core.layout.LayoutEnums.Justify;
 import dev.vexelray.gui.core.layout.Length;
@@ -89,7 +90,7 @@ final class MapPane {
                 .size(Length.percent(100), Length.percent(100))
                 // The boxes are a view over the drawing, which jumps: sliding them would leave them behind it.
                 .childMotion(false);
-        gui.onResizeUi(layer, this::resized);
+        gui.hear(layer, NodeEvent.RESIZE, this::resized);
         Node stage = gui.column()
                 .width(Length.FILL).height(Length.grow(1f))
                 .padding(Type.GUTTER, Type.GUTTER)
@@ -227,7 +228,7 @@ final class MapPane {
         if (t == null) {
             Node label = gui.text(n.shownLabel()).hitInert(true).visible(false);
             Node box = gui.box().role("button").children(label);
-            gui.onClick(box, () -> focus.accept(n.id()));
+            gui.hear(box, NodeEvent.CLICK, click -> focus.accept(n.id()));
             gui.landmark(Landmarks.mapNode(n.id()), box);
             t = new Target(box, label);
             targets.put(n.id(), t);

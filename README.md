@@ -131,7 +131,7 @@ Read these in this order.
 | `Recipes.java` | **what this application builds.** One `@Provides` method per part; `MaistroAppWiring`, which builds them in order, is generated from it while the project compiles. A part's phase is the latest phase of anything it takes, so there is none to declare. New parts go here. |
 | `Doc.java`, `Model.java` | the session: its strands (the main one and each branch, with its transcript, what its agent is doing and its readouts), which panes are up and the mind map, as one immutable value changed only by functions of the current value, committed through atchung's `State`. |
 | `Conductor.java` | the agent's side: a Claude Code process per strand (a `Lane`), and each of its events turned into one commit to its strand. |
-| `Archive.java` | every conversation kept, one JSON file each under `~/.maistro/conversations/`, written on the offload lane when a turn ends and once more as the application closes. |
+| `Archive.java` | every conversation kept, one JSON file each under `~/.maistro/conversations/`, written by a job (`WriteConversation`) when a turn ends and once more as the application closes. |
 | `Ui.java` and its panes | the window: `PaneRail`, `ConversationPane`, `MapPane`, `ContextPane`. Hold no state; `show(Doc)` writes everything derived from the session. |
 | `Actions.java` | every command and its chord. |
 | `Session.java` | what comes back next time (the panes), in the framework's one settings store. |
@@ -166,12 +166,14 @@ Open `target/generated-sources/annotations/.../MaistroAppWiring.java` after a bu
 
 ### Threading, in one paragraph
 
-The GUI loop runs on its own thread. Every handler (a click, a key, a submitted message) runs on a worker; the first
-send starts Claude Code there, off the frame loop. The agent's events arrive on the session's own reader thread, one
-at a time and in order. Workers and the reader meet at `Model`, whose compare-and-set puts concurrent changes in an
-order. A listener registered with `Model.onChange` fires on the committing thread; writing a node's props from there
-is correct, because a prop written off the GUI thread is applied by the next drain. Nothing commits to the model
-while holding a lock a model listener takes, and nothing inside the frame loop reads the model.
+Every press, chord and submitted message is heard on the GUI thread, in the frame (`Presses`, `Screen`), so nothing
+there waits. Slow work is a framework `@Job` (`Work` holds the messages): writing, listing and reading conversations,
+saving settings, and the sign-in check, each answered by a message `Screen` hears. The agent's events arrive on the
+session's own reader thread, one at a time and in order. The GUI thread and the readers meet at `Model`, whose
+compare-and-set puts concurrent changes in an order. A listener registered with `Model.onChange` fires on the
+committing thread, and a widget may be built or written on the GUI thread only, so the listener sends `Changed` (a
+state topic: a burst of commits is one redraw) and `Screen` redraws from `Model.doc()` in the next frame. Nothing
+commits to the model while holding a lock a model listener takes.
 
 ### Spans
 

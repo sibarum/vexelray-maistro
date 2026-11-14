@@ -4,20 +4,17 @@ import dev.vexelray.framework.api.Configuration;
 import dev.vexelray.framework.api.Provides;
 import dev.vexelray.framework.api.Setting;
 import dev.vexelray.framework.shell.Appearance;
-import dev.vexelray.framework.shell.Shell;
 import dev.vexelray.gui.core.Gui;
 import dev.vexelray.gui.core.app.AppHome;
 import dev.vexelray.gui.core.app.Settings;
 import dev.vexelray.gui.core.layout.Length;
-import dev.vexelray.gui.krono.KronoGui;
 import dev.vexelray.gui.widget.TitleBar;
 import dev.vexelray.maistro.tools.AppTools;
 import dev.vexelray.maistro.tools.Apps;
 import dev.vexelray.maistro.tools.McpServer;
 import dev.vexelray.maistro.tools.Toolset;
 import java.util.List;
-import sibarum.tactroller.api.Key;
-import sibarum.tactroller.api.Modifier;
+import sibarum.atchung.Sender;
 
 
 /**
@@ -29,8 +26,12 @@ import sibarum.tactroller.api.Modifier;
  * lands in {@code target/generated-sources/annotations}. It calls each method below once, in the phase its
  * parameters put it in: <b>a part's phase is the latest phase of anything it takes.</b> So the look, the model and
  * the session store exist before the {@code Gui} does; the window's contents wait for the {@code Gui}, its clock and
- * its title bar; and the restore, which takes the {@code Shell}, comes last, when the window and the dialogs exist.
- * There is no phase to declare and none to get wrong. Open the generated file after a build to see the order.
+ * its title bar. There is no phase to declare and none to get wrong. Open the generated file after a build to see
+ * the order.
+ *
+ * <p>Nothing here waits for the window itself: what happens once it exists (bringing back last time's panes) is
+ * {@link Screen}, the view that hears the framework's {@code WindowOpened}. No part takes the {@code Shell}, which the
+ * processor refuses.
  *
  * <p>The automation sockets are not here. They come from {@code AutomationStarter}, which {@code MaistroApp}
  * names in its {@code @VexelApp} (see {@link Maistro}).
@@ -67,26 +68,26 @@ final class Recipes {
 
     /** What is remembered between runs, over the framework's one settings store. */
     @Provides
-    Session session(Settings settings, Model model) {
-        return new Session(settings, model);
+    Session session(Settings settings, Model model, Sender<Work.SaveSettings> saves) {
+        return new Session(settings, model, saves);
     }
 
     /**
      * The window's contents. Needs the {@code Gui}, its clock and its title bar, and no window — so a test can build
      * the real tree headless ({@code VexelApplication.tree}), which {@code UiTest} does.
      *
-     * <p>The clock is for motion: {@link Motion} makes the ramps every widget here animates with. Every change to the
-     * session redraws what is derived from it, on the committing thread — a worker, because every handler is — and
-     * is remembered for next time.
+     * <p>The clock is for motion: {@link Motion} holds the tempi every widget here animates with. A change to the
+     * session is committed on whichever thread made it, and a widget may be written on the GUI thread only, so a
+     * commit says {@link Changed} and {@link Screen} redraws in the next frame. What is remembered for next time is
+     * noted on the same thread, and written to disk by a job.
      */
     @Provides
-    Ui ui(Gui gui, KronoGui krono, Model model, TitleBar titleBar, Session session) {
-        Ui ui = new Ui(gui, new Motion(krono), model, titleBar);
+    Ui ui(Gui gui, Model model, TitleBar titleBar, Session session, Sender<Changed> changed) {
+        Ui ui = new Ui(gui, new Motion(gui), model, titleBar);
         model.onChange(doc -> {
-            ui.show(doc);
+            changed.send(new Changed(model.version()));
             session.remember();
         });
-        zoomShortcuts(gui);
         return ui;
     }
 
@@ -123,66 +124,19 @@ final class Recipes {
 
     /**
      * Every conversation, kept on disk under the application's home ({@code ~/.maistro/conversations}, or
-     * under {@code -Dvexelray-maistro.home}), written on the offload lane when a turn ends. Writes nothing until
-     * {@link #start} arms it.
+     * under {@code -Dvexelray-maistro.home}), written by a job when a turn ends. Writes nothing until
+     * {@link Screen} arms it, once the window is open.
      */
     @Provides
-    Archive archive(Gui gui, Model model) {
-        Archive archive = new Archive(AppHome.of(Maistro.APP).file("conversations"), gui.offload());
+    Archive archive(Model model, Sender<Work.Write> writes, Sender<Work.ListAll> lists, Sender<Work.Read> reads) {
+        Archive archive = new Archive(AppHome.of(Maistro.APP).file("conversations"), writes, lists, reads);
         model.onChange(archive::changed);
         return archive;
     }
 
-    /**
-     * Every command, and the chords for them.
-     */
+    /** Every command. The chords for them, zoom's among them, are {@link Screen}'s. */
     @Provides
-    Actions actions(Gui gui, Model model, Ui ui, Conductor conductor, Archive archive) {
-        Actions actions = new Actions(gui, model, ui, conductor, archive);
-        actions.shortcuts();
-        return actions;
-    }
-
-    /**
-     * Bring back last time's panes, start keeping conversations, ask Claude Code whether it is signed in, and put the
-     * keyboard in the composer.
-     *
-     * <p>The sign-in check is here, not in the conductor's recipe, because it runs a process, which a tree built
-     * headless for a test must not.
-     *
-     * <p>Takes the {@code Shell} to be last: restoring writes settings and the archive writes conversations, which a
-     * tree built headless for a test must not, and the {@code Shell} is the framework's last-phase value.
-     *
-     * <p>A provider has to return something that is neither {@code void} nor a record, hence {@link Started}, which
-     * marks that this ran and is otherwise empty.
-     */
-    @Provides
-    Started start(Shell shell, Actions actions, Session session, Ui ui, Archive archive) {
-        session.restore();
-        archive.arm();
-        actions.checkAccount();
-        ui.conversation().focusComposer();
-        return new Started();
-    }
-
-    /** That {@link #start} has run. */
-    static final class Started {
-    }
-
-    /**
-     * Ctrl+= / Ctrl+- / Ctrl+0, and the numpad's three.
-     *
-     * <p>An application decision, which is why it is here: which chord zooms, or whether zooming exists at all, is not
-     * something a framework should choose. <b>How far the zoom goes is</b>, and it is not stated here — that is
-     * {@code Appearance.ZoomRange}, applied by the framework before the first widget, so every window on the desk
-     * agrees about it.
-     */
-    private static void zoomShortcuts(Gui gui) {
-        gui.shortcut(Key.EQUAL, gui::zoomIn, Modifier.CONTROL);
-        gui.shortcut(Key.MINUS, gui::zoomOut, Modifier.CONTROL);
-        gui.shortcut(Key.DIGIT_0, gui::resetZoom, Modifier.CONTROL);
-        gui.shortcut(Key.NUMPAD_ADD, gui::zoomIn, Modifier.CONTROL);
-        gui.shortcut(Key.NUMPAD_SUBTRACT, gui::zoomOut, Modifier.CONTROL);
-        gui.shortcut(Key.NUMPAD_0, gui::resetZoom, Modifier.CONTROL);
+    Actions actions(Model model, Ui ui, Conductor conductor, Archive archive, Sender<Work.AccountCheck> checks) {
+        return new Actions(model, ui, conductor, archive, checks);
     }
 }

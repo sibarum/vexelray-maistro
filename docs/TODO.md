@@ -10,6 +10,10 @@ longer list this is drawn from.
 
 ## Next
 
+- [ ] A strand's first message starts Claude Code on the GUI thread (`Conductor.send`, and `release` after a sign-in
+      check): since the 0.2 port every command is heard there, and starting a process is I/O (about 15 ms seen, plus
+      writing `mcp.json`). Move the start off it, most likely by making the conductor a `@Component` that hears the
+      commands as messages, or a `@Job` that starts the process and replies with it.
 - [ ] Signing in (guide, *Signing in*), after the status check and card: sign in from the card's button
       (`claude auth login`, with Cancel; find out whether it needs a terminal or a pasted code), mid-session
       `authentication_failed` turning the account to signed out, and the account in Settings with Sign out.

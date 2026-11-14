@@ -46,8 +46,9 @@ import java.util.function.UnaryOperator;
  *
  * <h2>Threads</h2>
  *
- * <p>Commands are called on workers. Starting a process is I/O, so a strand's first message starts it right there,
- * on the worker that is already off the frame loop, and later messages write one line to its stdin. Each process's
+ * <p>Commands are called on the GUI thread, heard in the frame. A strand's first message starts its process right
+ * there, which is I/O on the GUI thread (docs/TODO.md), and later messages write one line to its stdin. The sign-in
+ * check, which waits on a process, is the {@link CheckAccount} job's. Each process's
  * events arrive on its own reader thread, one at a time and in order ({@link AgentListener}), and each becomes one
  * commit to the {@link Model}, whose compare-and-set puts the lanes' commits in an order. Nothing here holds a lock
  * while committing, and nothing here is reached from a model listener.
@@ -119,7 +120,7 @@ final class Conductor implements AutoCloseable {
         return lane(model.doc().shown().id());
     }
 
-    // ------------------------------------------------------------------ commands, on workers
+    // ------------------------------------------------------------------ commands, on the GUI thread
 
     /** Say {@code text} in the strand on screen. */
     void send(String text) {
@@ -127,26 +128,37 @@ final class Conductor implements AutoCloseable {
     }
 
     /**
-     * Ask the CLI whether it is signed in ({@code claude auth status}), and let the messages kept back go once
-     * nothing more is to be waited for: signed in, no CLI to wait on, or a CLI that did not say. Signed out, they stay
-     * kept. Blocks for as long as the CLI takes to answer, so it runs on the offload lane, never on a handler.
+     * Start asking the CLI whether it is signed in: say so in the model, and return the request for the
+     * {@link CheckAccount} job, which runs {@code claude auth status} on the job lane, since it blocks for as long as the
+     * CLI takes. Its answer comes back to {@link #accountChecked}.
      */
-    void checkAccount() {
+    Work.AccountCheck checkAccount() {
         // Two checks may overlap (startup, and Check again pressed at once); only the last one started may answer.
         long n = checks.incrementAndGet();
         model.change(d -> d.withAccount(Doc.Account::checking));
-        ClaudeCli.Result found = ClaudeCli.locate(launch.claude());
-        Doc.Account account;
-        if (found.isFound()) {
-            Path exe = found.location().orElseThrow().executable();
-            AuthStatus s = AuthStatus.check(exe, AgentSession.Options.of(exe).childEnvironment(System.getenv()),
-                    AgentProcess.SYSTEM);
-            Doc.Account.State state = !s.known() ? Doc.Account.State.UNKNOWN
-                    : s.signedIn() ? Doc.Account.State.SIGNED_IN : Doc.Account.State.SIGNED_OUT;
-            account = new Doc.Account(state, s.signedIn() ? s.method() : "", exe.toString(), s.detail());
-        } else {
-            account = new Doc.Account(Doc.Account.State.NO_CLI, "", "", found.reason());
+        return new Work.AccountCheck(n, launch.claude());
+    }
+
+    /** What the CLI {@code claude} (empty: find it) says about its account. Blocks on a process: the job lane's. */
+    static Doc.Account account(String claude) {
+        ClaudeCli.Result found = ClaudeCli.locate(claude);
+        if (!found.isFound()) {
+            return new Doc.Account(Doc.Account.State.NO_CLI, "", "", found.reason());
         }
+        Path exe = found.location().orElseThrow().executable();
+        AuthStatus s = AuthStatus.check(exe, AgentSession.Options.of(exe).childEnvironment(System.getenv()),
+                AgentProcess.SYSTEM);
+        Doc.Account.State state = !s.known() ? Doc.Account.State.UNKNOWN
+                : s.signedIn() ? Doc.Account.State.SIGNED_IN : Doc.Account.State.SIGNED_OUT;
+        return new Doc.Account(state, s.signedIn() ? s.method() : "", exe.toString(), s.detail());
+    }
+
+    /**
+     * The CLI answered check {@code n}: show the account, and let the messages kept back go once nothing more is to be
+     * waited for: signed in, no CLI to wait on, or a CLI that did not say. Signed out, they stay kept. An answer to a
+     * check that a later one overtook says nothing.
+     */
+    void accountChecked(long n, Doc.Account account) {
         if (checks.get() != n) {
             return;
         }
@@ -718,7 +730,7 @@ final class Conductor implements AutoCloseable {
         }
 
         /**
-         * The human answered the tool turn {@code turn}: allow it to run, or deny it. On a worker. A second answer
+         * The human answered the tool turn {@code turn}: allow it to run, or deny it. A second answer
          * to the same turn (a double click) does nothing.
          */
         void answer(long turn, boolean allow) {
@@ -740,7 +752,7 @@ final class Conductor implements AutoCloseable {
         /**
          * The human allowed the tool turn {@code turn} and took offer {@code n} with it: the tool runs, and the
          * CLI's own suggestion goes back unchanged so it stops asking for what that covers. The turn wears what was
-         * set up, scope and all. On a worker; a second answer, or an offer that is not there, does nothing.
+         * set up, scope and all. A second answer, or an offer that is not there, does nothing.
          */
         void answerAlways(long turn, int n) {
             Asked a = asks.get(turn);

@@ -19,7 +19,7 @@ import java.util.function.UnaryOperator;
  * <p>One generic committer rather than one per command. The names would be the vocabulary a replicated peer binds
  * to, and nothing replicates this; splitting it is a mechanical change the compiler drives when something does.
  *
- * <h2>Handlers run on workers; this is the serialisation point</h2>
+ * <h2>Commits come from several threads; this is the serialisation point</h2>
  *
  * <p>Nothing else in this application needs a lock for the session's shape, and if something starts to, that is
  * the signal that state has escaped this class.

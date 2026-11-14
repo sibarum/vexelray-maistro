@@ -1,6 +1,7 @@
 package dev.vexelray.maistro;
 
 import dev.vexelray.gui.core.app.Settings;
+import sibarum.atchung.Sender;
 
 import java.util.Objects;
 
@@ -8,7 +9,8 @@ import java.util.Objects;
  * What comes back next time: which panes were up.
  *
  * <p>Kept in the framework's one {@link Settings}, the same store that remembers where the window was, under keys of
- * this application's own. Written when that changes, read once, after the window exists.
+ * this application's own. Put in memory when that changes and written to disk by the {@link SaveSettings} job, never
+ * on the thread that changed it; read once, after the window exists.
  *
  * <p>The conversation itself is not remembered here: {@link Archive} keeps each one in a file of its own.
  */
@@ -18,13 +20,15 @@ final class Session {
 
     private final Settings settings;
     private final Model model;
+    private final Sender<Work.SaveSettings> saves;
     private volatile String last;
     /** Off until {@link #restore} has run: before that, a write would overwrite what is being restored. */
     private volatile boolean armed;
 
-    Session(Settings settings, Model model) {
+    Session(Settings settings, Model model, Sender<Work.SaveSettings> saves) {
         this.settings = settings;
         this.model = model;
+        this.saves = saves;
     }
 
     /** The panes as three letters, c, m and x, each upper case when shown. */
@@ -53,7 +57,8 @@ final class Session {
             return;
         }
         last = now;
-        settings.putString(PANES, now).save();
+        settings.putString(PANES, now);
+        saves.send(new Work.SaveSettings());
     }
 
     /** Bring back the panes. */

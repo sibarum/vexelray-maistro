@@ -32,8 +32,8 @@ them even when a shortcut looks harmless:
 - **Nothing reflects.** No `Class.forName`, no runtime annotation reads, no reflective serialization. This compiles to
   a GraalVM native image, and the framework's wiring is generated at compile time so that nothing needs reflection.
 - **Nothing in the frame loop allocates, logs or blocks.** No disk, no network, no locks there.
-- **Vulkan, the window and present stay on the main thread.** Handlers run on workers, and disk work goes to the
-  offload lane. README's *Threading, in one paragraph* is the whole model: nothing commits to the model while
+- **Vulkan, the window and present stay on the main thread.** Presses and chords are heard on the GUI thread, and disk
+  work is a `@Job`'s (`Work`). README's *Threading, in one paragraph* is the whole model: nothing commits to the model while
   holding a lock that anything reached from a model listener takes.
 - **All input comes through tactroller.** No polling the OS keyboard, and no native listener of your own.
 - **Log through `sibarum.probe.Log`**, as `Log.of("vexelray-maistro.<area>")`. stdout is for lines another program parses

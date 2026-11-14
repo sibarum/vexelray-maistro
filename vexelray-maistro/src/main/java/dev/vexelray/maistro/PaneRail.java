@@ -43,8 +43,8 @@ final class PaneRail {
         IconButton button = new IconButton(gui, icon, name)
                 .size(Type.TARGET, Type.ICON)
                 .toggle(true)
-                .tip(name)
-                .onPress(() -> toggle.accept(pane));
+                .tip(name);
+        Presses.on(gui, button, () -> toggle.accept(pane));
         toggles.put(pane, button);
         gui.landmark(landmark, button.node());
         root.append(button.node());

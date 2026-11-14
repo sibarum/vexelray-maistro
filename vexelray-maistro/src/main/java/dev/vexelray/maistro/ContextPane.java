@@ -46,8 +46,8 @@ final class ContextPane {
                 .wordWrap(true).width(Length.FILL);
         gui.landmark(Landmarks.CONTEXT_FOCUS, focus);
         links = note("");
-        Button branchButton = new Button(gui, "Branch from here (Ctrl+B)").kind(Button.Kind.SECONDARY)
-                .onPress(() -> branchAction.run());
+        Button branchButton = new Button(gui, "Branch from here (Ctrl+B)").kind(Button.Kind.SECONDARY);
+        Presses.on(gui, branchButton, () -> branchAction.run());
         gui.landmark(Landmarks.CONTEXT_BRANCH, branchButton.node());
         this.branch = branchButton.node();
         all = value();

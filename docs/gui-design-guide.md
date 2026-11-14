@@ -121,7 +121,7 @@ The CLI manages them without its terminal UI: `claude auth status --json` (`{"lo
 "none", ...}`, exit code 1 when signed out), `claude auth login [--claudeai | --console | --sso]` and
 `claude auth logout`.
 
-- **Check before the first message, not after it fails.** At startup a worker runs `auth status` on the CLI it found.
+- **Check before the first message, not after it fails.** At startup a job runs `auth status` on the CLI it found.
   The session's account is *checking*, *signed in (method)*, *signed out* or *no CLI (reason)*, and the title bar's
   status line says which.
 - **Signed out shows a card, not an error.** In place of the empty transcript: "Claude Code isn't signed in", the

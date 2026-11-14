@@ -21,9 +21,8 @@ import dev.vexelray.gui.widget.TitleBar;
  * <p>{@link #show} takes a whole {@link Doc} and writes everything derived from it, which is the rule worth keeping
  * as this grows: a label that remembers a value can disagree with the session.
  *
- * <p>{@code show} is called from the committing thread, which is a worker or the agent's reader. That is correct and
- * is the framework's own idiom: a prop written off the GUI thread is queued and applied by the next drain. What is
- * <em>not</em> allowed is the other direction, reading the model from inside the frame loop.
+ * <p>{@code show} is called on the GUI thread only, by {@link Screen} when it hears {@link Changed}: since vexelray-gui
+ * 0.2 a widget is built and written there and nowhere else, and the model is committed from other threads too.
  */
 final class Ui {
 

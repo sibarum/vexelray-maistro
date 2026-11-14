@@ -1,31 +1,33 @@
 package dev.vexelray.maistro;
 
-import dev.vexelray.gui.core.Gui;
+import dev.vexelray.maistro.archive.Conversation;
+import dev.vexelray.maistro.archive.ConversationCodec;
 import dev.vexelray.maistro.archive.Summary;
-import sibarum.tactroller.api.Key;
-import sibarum.tactroller.api.Modifier;
+import sibarum.atchung.Sender;
 
 /**
- * Every command Maistro has, and the chords for them.
+ * Every command Maistro has. The chords for them are {@link Screen}'s, declared in its keymap.
  *
- * <p>Commands arrive on workers: a shortcut, a press, a submitted composer. Talking to the agent's process is the
- * {@link Conductor}'s, which never blocks the caller on it, so a slow start of Claude Code is a slow reply rather
- * than a frozen window. Reading a saved conversation is the {@link Archive}'s, on the offload lane.
+ * <p>Commands arrive on the GUI thread: a chord, a press, a submitted composer, each heard in the frame. So nothing here
+ * waits. Talking to the agent's process is the {@link Conductor}'s, which never blocks the caller on it, so a slow
+ * start of Claude Code is a slow reply rather than a frozen window. Reading the disk and asking the CLI whether it is
+ * signed in are jobs' ({@link Work}): this sends the request, and {@link Screen} hands the reply back to the method
+ * here that acts on it, on the GUI thread again.
  */
 final class Actions {
 
-    private final Gui gui;
     private final Model model;
     private final Ui ui;
     private final Conductor conductor;
     private final Archive archive;
+    private final Sender<Work.AccountCheck> checks;
 
-    Actions(Gui gui, Model model, Ui ui, Conductor conductor, Archive archive) {
-        this.gui = gui;
+    Actions(Model model, Ui ui, Conductor conductor, Archive archive, Sender<Work.AccountCheck> checks) {
         this.model = model;
         this.ui = ui;
         this.conductor = conductor;
         this.archive = archive;
+        this.checks = checks;
         ui.conversation().onSend(conductor::send);
         ui.conversation().onAnswer(conductor::answer);
         ui.conversation().onAlways(conductor::answerAlways);
@@ -35,28 +37,9 @@ final class Actions {
         ui.conversation().onCheckAccount(this::checkAccount);
     }
 
-    /**
-     * Ask Claude Code whether it is signed in, on the offload lane: it is a process to wait on, and a handler must
-     * not wait. At startup, and on Check again.
-     */
+    /** Ask Claude Code whether it is signed in. At startup, and on Check again; the answer is {@link CheckAccount}'s. */
     void checkAccount() {
-        gui.offload().execute(conductor::checkAccount);
-    }
-
-    /**
-     * Every chord, as a {@code GLOBAL} claim. Claims rather than key handlers, which is how this framework does
-     * preemption: a focused field outranks a global claim by claiming the same chord itself, so the chords chosen
-     * here are ones a text field leaves alone.
-     */
-    void shortcuts() {
-        gui.shortcut(Key.DIGIT_1, () -> model.toggle(Doc.Pane.CONVERSATION), Modifier.CONTROL);
-        gui.shortcut(Key.DIGIT_2, () -> model.toggle(Doc.Pane.MAP), Modifier.CONTROL);
-        gui.shortcut(Key.DIGIT_3, () -> model.toggle(Doc.Pane.CONTEXT), Modifier.CONTROL);
-        gui.shortcut(Key.L, ui.conversation()::focusComposer, Modifier.CONTROL);
-        gui.shortcut(Key.ESCAPE, this::escape);
-        gui.shortcut(Key.N, this::newConversation, Modifier.CONTROL);
-        gui.shortcut(Key.O, this::conversations, Modifier.CONTROL);
-        gui.shortcut(Key.B, this::branch, Modifier.CONTROL);
+        checks.send(conductor.checkAccount());
     }
 
     /** Merge branch {@code id} into the main strand, or say why not. */
@@ -84,7 +67,7 @@ final class Actions {
         }
     }
 
-    /** Open the list of saved conversations, or close it if it is open. Its rows are read on the offload lane. */
+    /** Open the list of saved conversations, or close it if it is open. Its rows are read by a job. */
     void conversations() {
         if (model.doc().library().open()) {
             closeConversations();
@@ -92,7 +75,12 @@ final class Actions {
         }
         model.change(d -> d.withLibrary(l -> Doc.Library.OPENING));
         ui.conversation().focusLibrary();
-        archive.list(rows -> model.change(d -> d.withLibrary(l -> l.loaded(rows))));
+        archive.list();
+    }
+
+    /** The saved conversations' rows were read. */
+    void listed(Work.Listed listed) {
+        model.change(d -> d.withLibrary(l -> l.loaded(listed.rows())));
     }
 
     private void closeConversations() {
@@ -101,8 +89,8 @@ final class Actions {
     }
 
     /**
-     * Carry on with saved conversation {@code s}: read it on the offload lane, then switch to it. Picking the one
-     * already open just closes the list.
+     * Carry on with saved conversation {@code s}: have it read, and switch to it when it has been ({@link #loaded}).
+     * Picking the one already open just closes the list.
      */
     void resume(Summary s) {
         if (s.id().equals(model.doc().meta().id())) {
@@ -114,16 +102,29 @@ final class Actions {
             ui.alert();
             return;
         }
-        archive.load(s.id(), c -> {
-            if (conductor.resume(c)) {
-                ui.conversation().focusComposer();
-            } else {
-                ui.alert();
-            }
-        }, why -> {
-            model.say(why);
+        archive.load(s.id());
+    }
+
+    /** A saved conversation was read: switch to it, or say why not. */
+    void loaded(Work.Loaded loaded) {
+        if (!loaded.problem().isEmpty()) {
+            model.say(loaded.problem());
             ui.alert();
-        });
+            return;
+        }
+        Conversation c;
+        try {
+            c = ConversationCodec.decode(loaded.json());
+        } catch (IllegalArgumentException e) {
+            model.say("Could not open that conversation: " + e.getMessage());
+            ui.alert();
+            return;
+        }
+        if (conductor.resume(c)) {
+            ui.conversation().focusComposer();
+        } else {
+            ui.alert();
+        }
     }
 
     /** Escape: close the list of conversations if it is open, else stop the agent's turn if it has one. */

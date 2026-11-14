@@ -13,6 +13,7 @@ import dev.vexelray.gui.icons.Icon;
 import dev.vexelray.gui.widget.Button;
 import dev.vexelray.gui.widget.IconButton;
 import dev.vexelray.gui.widget.ListView;
+import dev.vexelray.gui.widget.Nodes;
 import dev.vexelray.gui.widget.SelectionModel;
 import dev.vexelray.maistro.archive.Summary;
 import dev.vexelray.gui.widget.TextField;
@@ -20,6 +21,7 @@ import dev.vexelray.maistro.chat.Transcript;
 import dev.vexelray.maistro.chat.Turn;
 import dev.vexelray.maistro.map.MapProtocol;
 import dev.vexelray.maistro.text.Markdown;
+import sibarum.atchung.Subscription;
 
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -66,6 +68,7 @@ final class ConversationPane {
     private Node strandButtons;
     private Node abandonRow;
     private final Map<String, Node> strandNodes = new java.util.LinkedHashMap<>();
+    private final List<Subscription> strandPresses = new ArrayList<>();
     private List<String> strandSays = List.of();
     private volatile String shownStrand = Doc.MAIN;
     private volatile Consumer<String> showStrand = id -> { };
@@ -141,14 +144,15 @@ final class ConversationPane {
                 .children(empty);
         gui.landmark(Landmarks.TRANSCRIPT, transcript);
 
-        composer = new TextField(gui, "").onSubmit(this::submit);
+        composer = new TextField(gui, "");
+        Presses.submitted(gui, composer, this::submit);
         composer.node().width(Length.grow(1f)).font(Type.UI).textSize(Type.BODY);
         gui.landmark(Landmarks.COMPOSER, composer.node());
 
         IconButton sendButton = new IconButton(gui, Icon.ARROW_UP, "Send")
                 .size(Type.TARGET, Type.ICON)
-                .tip("Send (Enter)")
-                .onPress(() -> submit(composer.text()));
+                .tip("Send (Enter)");
+        Presses.on(gui, sendButton, () -> submit(composer.text()));
         gui.landmark(Landmarks.SEND, sendButton.node());
 
         Node composerRow = gui.row()
@@ -163,8 +167,8 @@ final class ConversationPane {
         gui.landmark(Landmarks.COMPOSER_FROM, fromLabel);
         IconButton clear = new IconButton(gui, Icon.CLOSE, "Start from nowhere in particular")
                 .size(Type.TARGET, Type.ICON)
-                .tip("Start from nowhere in particular")
-                .onPress(unanchor);
+                .tip("Start from nowhere in particular");
+        Presses.on(gui, clear, unanchor);
         gui.landmark(Landmarks.COMPOSER_FROM_CLEAR, clear.node());
         from = gui.row()
                 .width(Length.FILL)
@@ -204,10 +208,12 @@ final class ConversationPane {
                 .background(gui.theme().color(Role.RAISED))
                 .children(signInCommand);
         gui.landmark(Landmarks.SIGN_IN_COMMAND, signInCommand);
-        Button check = new Button(gui, "Check again").kind(Button.Kind.PRIMARY).onPress(() -> checkAccount.run());
+        Button check = new Button(gui, "Check again").kind(Button.Kind.PRIMARY);
+        Presses.on(gui, check, () -> checkAccount.run());
         gui.landmark(Landmarks.SIGN_IN_CHECK, check.node());
-        copy = new Button(gui, "Copy command").kind(Button.Kind.SECONDARY)
-                .onPress(() -> gui.clipboard().set(signInCommand(shownAccount == null ? "" : shownAccount.cli())));
+        copy = new Button(gui, "Copy command").kind(Button.Kind.SECONDARY);
+        Presses.on(gui, copy,
+                () -> gui.clipboard().set(signInCommand(shownAccount == null ? "" : shownAccount.cli())));
         gui.landmark(Landmarks.SIGN_IN_COPY, copy.node());
         signInFoot = gui.text("Messages you send meanwhile are kept, and go out once it is signed in.")
                 .font(Type.UI).textSize(Type.BODY).textColor(gui.theme().color(Role.FAINT))
@@ -274,11 +280,11 @@ final class ConversationPane {
      */
     private Node strandBar() {
         strandButtons = gui.row().gap(Type.TIGHT).alignItems(AlignItems.CENTER);
-        Button mergeButton = new Button(gui, "Merge into main").kind(Button.Kind.SECONDARY)
-                .onPress(() -> merge.accept(shownStrand));
+        Button mergeButton = new Button(gui, "Merge into main").kind(Button.Kind.SECONDARY);
+        Presses.on(gui, mergeButton, () -> merge.accept(shownStrand));
         gui.landmark(Landmarks.BRANCH_MERGE, mergeButton.node());
-        Button abandonButton = new Button(gui, "Abandon").kind(Button.Kind.GHOST)
-                .onPress(() -> abandon.accept(shownStrand));
+        Button abandonButton = new Button(gui, "Abandon").kind(Button.Kind.GHOST);
+        Presses.on(gui, abandonButton, () -> abandon.accept(shownStrand));
         gui.landmark(Landmarks.BRANCH_ABANDON, abandonButton.node());
         abandonRow = gui.row().gap(Type.TIGHT).alignItems(AlignItems.CENTER)
                 .children(mergeButton.node(), abandonButton.node());
@@ -314,11 +320,13 @@ final class ConversationPane {
                 e.getValue().remove();
             }
             strandNodes.clear();
+            strandPresses.forEach(Subscription::close);
+            strandPresses.clear();
             for (Doc.Strand s : all) {
                 String id = s.id();
                 Button b = new Button(gui, strandTitle(s))
-                        .kind(id.equals(shown) ? Button.Kind.PRIMARY : Button.Kind.GHOST)
-                        .onPress(() -> showStrand.accept(id));
+                        .kind(id.equals(shown) ? Button.Kind.PRIMARY : Button.Kind.GHOST);
+                strandPresses.add(Presses.on(gui, b, () -> showStrand.accept(id)));
                 gui.landmark(Landmarks.strand(id), b.node());
                 strandButtons.append(b.node());
                 strandNodes.put(id, b.node());
@@ -340,9 +348,9 @@ final class ConversationPane {
      * fills it.
      */
     private Node library() {
-        list = new ListView<Summary>(gui, LIBRARY_ROW_REM, this::libraryRow, SelectionModel.single())
-                .onRowClicked(s -> resume.accept(s))
-                .onActivate(s -> resume.accept(s));
+        list = new ListView<Summary>(gui, LIBRARY_ROW_REM, this::libraryRow, SelectionModel.single());
+        gui.mailbox(ListView.CLICKED, list.address(), c -> resumeRow(c.item()));
+        gui.mailbox(ListView.ACTIVATED, list.address(), a -> resumeRow(a.item()));
         list.node().width(Length.FILL).height(Length.grow(1f));
         gui.landmark(Landmarks.CONVERSATIONS, list.node());
         libraryHint = gui.text("").font(Type.UI).textSize(Type.BODY).textColor(gui.theme().color(Role.FAINT))
@@ -359,17 +367,24 @@ final class ConversationPane {
         return library;
     }
 
-    private Node libraryRow(Gui g, Summary s) {
-        Node row = g.column()
+    private Node libraryRow(Nodes n, Summary s) {
+        Node row = n.column()
                 .width(Length.FILL)
                 .padding(Length.dp(4), Length.dp(8))
                 .gap(Length.dp(2))
-                .children(g.text(s.shownTitle()).font(Type.UI).textSize(Type.BODY)
-                                .textColor(g.theme().color(Role.INK)),
-                        g.text(s.detail(ZoneId.systemDefault())).font(Type.MONO).textSize(Type.LABEL)
-                                .textColor(g.theme().color(Role.FAINT)));
-        g.landmark(Landmarks.conversationRow(s.id()), row);
+                .children(n.text(s.shownTitle()).font(Type.UI).textSize(Type.BODY)
+                                .textColor(n.theme().color(Role.INK)),
+                        n.text(s.detail(ZoneId.systemDefault())).font(Type.MONO).textSize(Type.LABEL)
+                                .textColor(n.theme().color(Role.FAINT)));
+        gui.landmark(Landmarks.conversationRow(s.id()), row);
         return row;
+    }
+
+    /** A saved conversation's row was clicked, or Enter pressed on it. */
+    private void resumeRow(Object item) {
+        if (item instanceof Summary s) {
+            resume.accept(s);
+        }
     }
 
     /** What clicking a saved conversation does. */
@@ -444,8 +459,8 @@ final class ConversationPane {
 
     /**
      * Bring the widgets up to {@code t}: build a view for each turn not seen before, rewrite the ones that changed.
-     * Called from the model's listener, whose deliveries are serialised; synchronized anyway, since a test may call
-     * it directly.
+     * Called on the GUI thread, by {@link Screen}; synchronized anyway, since a test may call it
+     * directly.
      */
     synchronized void show(Transcript t) {
         empty.visible(t.size() == 0);
@@ -508,6 +523,10 @@ final class ConversationPane {
         final Node offers;
         List<Button> offerButtons = List.of();
         List<String> offerLabels = List.of();
+        /** Allow's and Deny's routes, for as long as the turn is on screen. */
+        final List<Subscription> presses = new ArrayList<>();
+        /** The offers' routes, closed whenever the offers are rebuilt. */
+        final List<Subscription> offerPresses = new ArrayList<>();
         Turn shown;
         /** The chips on show, and what they say. */
         Node[] chipList = new Node[0];
@@ -518,8 +537,10 @@ final class ConversationPane {
             body = gui.text("").wordWrap(true).width(Length.FILL);
             chips = gui.row().gap(Type.TIGHT);
             long id = turn.id();
-            allow = new Button(gui, "Allow").kind(Button.Kind.PRIMARY).onPress(() -> answer.answer(id, true));
-            deny = new Button(gui, "Deny").kind(Button.Kind.SECONDARY).onPress(() -> answer.answer(id, false));
+            allow = new Button(gui, "Allow").kind(Button.Kind.PRIMARY);
+            deny = new Button(gui, "Deny").kind(Button.Kind.SECONDARY);
+            presses.add(Presses.on(gui, allow, () -> answer.answer(id, true)));
+            presses.add(Presses.on(gui, deny, () -> answer.answer(id, false)));
             gui.landmark(Landmarks.askAllow(id), allow.node());
             gui.landmark(Landmarks.askDeny(id), deny.node());
             ask = gui.row().gap(Type.TIGHT).alignItems(AlignItems.CENTER)
@@ -538,6 +559,8 @@ final class ConversationPane {
             for (int i = 0; i < offerButtons.size(); i++) {
                 gui.clearLandmark(Landmarks.askAlways(shown.id(), i));
             }
+            presses.forEach(Subscription::close);
+            offerPresses.forEach(Subscription::close);
             root.remove();
         }
 
@@ -548,12 +571,14 @@ final class ConversationPane {
                     gui.clearLandmark(Landmarks.askAlways(turn.id(), i));
                     offerButtons.get(i).node().remove();
                 }
+                offerPresses.forEach(Subscription::close);
+                offerPresses.clear();
                 List<Button> made = new ArrayList<>();
                 for (int i = 0; i < turn.offers().size(); i++) {
                     long id = turn.id();
                     int n = i;
-                    Button b = new Button(gui, turn.offers().get(i)).kind(Button.Kind.SECONDARY)
-                            .onPress(() -> always.always(id, n));
+                    Button b = new Button(gui, turn.offers().get(i)).kind(Button.Kind.SECONDARY);
+                    offerPresses.add(Presses.on(gui, b, () -> always.always(id, n)));
                     gui.landmark(Landmarks.askAlways(id, i), b.node());
                     offers.append(b.node());
                     made.add(b);
