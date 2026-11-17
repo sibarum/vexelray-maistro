@@ -94,7 +94,8 @@ final class Recipes {
     /**
      * The agent: Claude Code, run as a child process in its streaming mode, and what turns its events into changes
      * to the session. Built with the model and nothing graphical, so it exists before the tree; it starts no process
-     * until the first message is sent, so a tree built headless for a test never launches one.
+     * until the first message is sent, so a tree built headless for a test never launches one. Starting one is the
+     * {@link Talk} job's, reached through {@code deliveries}, so the GUI thread never waits on a process.
      *
      * <p>Each launch option is a setting, so {@code --claude=C:/path/claude.exe}, {@code --model=opus} or
      * {@code --permissionMode=acceptEdits} on the command line changes it for one run. An empty {@code claude}
@@ -105,8 +106,10 @@ final class Recipes {
                         @Setting(value = "claude", def = "") String claude,
                         @Setting(value = "model", def = "") String agentModel,
                         @Setting(value = "permissionMode", def = "default") String permissionMode,
-                        @Setting(value = "cwd", def = "") String cwd) {
-        return new Conductor(model, new Conductor.Launch(claude, agentModel, permissionMode, cwd), toolset());
+                        @Setting(value = "cwd", def = "") String cwd,
+                        Sender<Work.Deliver> deliveries) {
+        return new Conductor(model, new Conductor.Launch(claude, agentModel, permissionMode, cwd), toolset(),
+                deliveries);
     }
 
     /**
@@ -124,7 +127,7 @@ final class Recipes {
 
     /**
      * Every conversation, kept on disk under the application's home ({@code ~/.maistro/conversations}, or
-     * under {@code -Dvexelray-maistro.home}), written by a job when a turn ends. Writes nothing until
+     * under {@code -Dmaistro.home}), written by a job when a turn ends. Writes nothing until
      * {@link Screen} arms it, once the window is open.
      */
     @Provides

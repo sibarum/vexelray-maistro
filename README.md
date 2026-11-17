@@ -168,8 +168,9 @@ Open `target/generated-sources/annotations/.../MaistroAppWiring.java` after a bu
 
 Every press, chord and submitted message is heard on the GUI thread, in the frame (`Presses`, `Screen`), so nothing
 there waits. Slow work is a framework `@Job` (`Work` holds the messages): writing, listing and reading conversations,
-saving settings, and the sign-in check, each answered by a message `Screen` hears. The agent's events arrive on the
-session's own reader thread, one at a time and in order. The GUI thread and the readers meet at `Model`, whose
+saving settings, and the sign-in check, each answered by a message `Screen` hears. Starting Claude Code and writing
+a strand's messages to it is one too (`Talk`), which answers nothing: the process's events are its answer. Those
+events arrive on the session's own reader thread, one at a time and in order. The GUI thread and the readers meet at `Model`, whose
 compare-and-set puts concurrent changes in an order. A listener registered with `Model.onChange` fires on the
 committing thread, and a widget may be built or written on the GUI thread only, so the listener sends `Changed` (a
 state topic: a burst of commits is one redraw) and `Screen` redraws from `Model.doc()` in the next frame. Nothing
@@ -278,10 +279,15 @@ letting it go:
 ottermate --script src/test/ottermate/signin.txt --launch mvn.cmd compile exec:exec -Dautomation=0 "-Dapp.args=--claude=src/test/ottermate/fake-claude-signed-out.cmd"
 ```
 
+`fake-claude-expired.cmd` says it is signed in and then answers every message as the real CLI answers one it
+cannot take (`replay-not-logged-in.jsonl`, recorded): `expired.txt` checks that losing the sign-in mid-session shows
+the card and keeps the message, with no red notes.
+
 A replay can answer some messages differently: a `#when <text>` line starts the lines played instead when a message
 contains `<text>`. `replay-map-turn.jsonl` answers a branch's first message (`#when You are a branch`) with a node
 of its own, and `branch.txt` uses it: it starts a branch from a node, asks it something, looks at the staged map,
-switches to `Main` and abandons the branch; `merge.txt` merges one instead and checks what the main agent is told. The stand-in appends to `target/fake-claude-stdin.txt` and never empties
+switches to `Main` and abandons the branch; `branch-from-composer.txt` presses Ctrl+B with a draft in the composer,
+which keeps the keyboard and lets the chord through; `merge.txt` merges one instead and checks what the main agent is told. The stand-in appends to `target/fake-claude-stdin.txt` and never empties
 it, one `#process` line per process, so a branch's messages land below main's.
 
 A run under `ottermate` that ends a turn saves the conversation into your real `~/.maistro`. To keep a check
@@ -292,7 +298,7 @@ out of it, give the run a home of its own. That moves the settings and the log t
 log):
 
 ```
-ottermate --script src/test/ottermate/new-conversation.txt --launch mvn.cmd compile exec:exec -Dautomation=0 "-Dapp.jvmArgs=-Dvexelray-maistro.home=C:/path/to/vexelray-maistro/target/ottermate-home" "-Dapp.args=--claude=src/test/ottermate/fake-claude.cmd"
+ottermate --script src/test/ottermate/new-conversation.txt --launch mvn.cmd compile exec:exec -Dautomation=0 "-Dapp.jvmArgs=-Dmaistro.home=C:/path/to/vexelray-maistro/target/ottermate-home" "-Dapp.args=--claude=src/test/ottermate/fake-claude.cmd"
 ```
 
 `ottermate` kills the application when a script ends, and a script cannot close its window, so nothing that runs

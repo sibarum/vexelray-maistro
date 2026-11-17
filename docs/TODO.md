@@ -10,19 +10,16 @@ longer list this is drawn from.
 
 ## Next
 
-- [ ] A strand's first message starts Claude Code on the GUI thread (`Conductor.send`, and `release` after a sign-in
-      check): since the 0.2 port every command is heard there, and starting a process is I/O (about 15 ms seen, plus
-      writing `mcp.json`). Move the start off it, most likely by making the conductor a `@Component` that hears the
-      commands as messages, or a `@Job` that starts the process and replies with it.
-- [ ] Signing in (guide, *Signing in*), after the status check and card: sign in from the card's button
-      (`claude auth login`, with Cancel; find out whether it needs a terminal or a pasted code), mid-session
-      `authentication_failed` turning the account to signed out, and the account in Settings with Sign out.
+- [ ] Ending a strand's process still happens on the GUI thread (New conversation, Abandon, Merge, Ctrl+O):
+      `AgentSession.close` waits up to a second for the CLI to exit and two more for its reader. Starting one is the
+      `Talk` job's now; ending one could be too.
+- [ ] Signing in (guide, *Signing in*), after the status check, card and mid-session expiry: sign in from the card's
+      button (`claude auth login`, with Cancel; find out whether it needs a terminal or a pasted code), and the
+      account in Settings with Sign out. Also find out whether a CLI already running picks up a sign-in made after it
+      started: the message kept on `authentication_failed` goes back to the same process.
 - [ ] Record `claude auth status --json` from a signed-in CLI into `src/test/resources/agent/` and test the parser
       on it; only the signed-out shape has been seen.
 
-- [ ] On Windows every double quote in a CLI argument is dropped (`ProcessBuilder` passes it unescaped), so
-      `--append-system-prompt` reaches the CLI with `MapProtocol.INSTRUCTIONS`' quotes gone. `--mcp-config` sidesteps it
-      with a file; the prompt does not yet.
 - [ ] Agent tools: record a real `tools/call` from a logged-in run (only the handshake is recorded,
       `real-mcp-handshake.jsonl`). The relay (`src/test/relay/`) plays one by the specification, and Maistro answers it,
       shot included. Then slice 2, the driving tools (`click`, `type`, `key`, `settle`, `await`) through the permission
@@ -35,8 +32,6 @@ longer list this is drawn from.
       SDK's documented ones and have not been seen from this CLI yet.
 - [ ] Permissions, the rest: per-app trust (guide, gap 3), a reason typed with a Deny, and a view of the standing
       rules already set up (they live in Claude Code's settings files).
-- [ ] Ctrl+B is checked with the map focused; whether the composer, when it has the keyboard, lets the chord
-      through is not.
 - [ ] Conversations, later: delete, rename, search, and Claude Code sessions started outside Maistro. A click on a
       row resumes through `onRowClicked`, which no script exercises yet (`resume.txt` uses Enter): rows are
       landmarked by id, which a script cannot know in advance.

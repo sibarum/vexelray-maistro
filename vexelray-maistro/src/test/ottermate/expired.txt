@@ -1,0 +1,12 @@
+# With fake-claude-expired.cmd: the CLI loses its sign-in mid-session. The card shows, the message is kept, no red notes.
+await status.account signed in
+await composer
+click composer
+type Hello after the sign-in lapsed
+key ENTER
+await status.account signed out
+await signin.title isn't signed in
+await status.agent waiting for sign-in
+settle
+find held
+shot target/expired-card.png

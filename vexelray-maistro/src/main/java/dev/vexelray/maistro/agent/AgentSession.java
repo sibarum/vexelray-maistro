@@ -122,8 +122,9 @@ public final class AgentSession implements AutoCloseable {
          * Give the agent the MCP servers in the config file {@code config} ({@code --mcp-config}), and let the tools
          * named in {@code allowed} run without asking ({@code --allowedTools}). The CLI's own MCP servers are kept.
          *
-         * <p>A file rather than the JSON itself, because on Windows {@link ProcessBuilder} passes an argument's
-         * double quotes through unescaped and the CLI's runtime then drops them, so inline JSON arrives broken.
+         * <p>A file rather than the JSON itself. It began as a way round {@link ProcessBuilder} passing an argument's
+         * double quotes through unescaped on Windows, which {@link AgentProcess#forWindows} now mends; the file is
+         * kept, since it needs no quoting on any OS.
          */
         public Options withMcpServer(Path config, List<String> allowed) {
             List<String> args = new ArrayList<>(extraArgs);

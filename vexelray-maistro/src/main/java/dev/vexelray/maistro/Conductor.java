@@ -16,6 +16,7 @@ import dev.vexelray.maistro.map.MapProtocol;
 import dev.vexelray.maistro.map.Merge;
 import dev.vexelray.maistro.map.Node;
 import dev.vexelray.maistro.tools.Toolset;
+import sibarum.atchung.Sender;
 import sibarum.probe.Log;
 
 import java.io.IOException;
@@ -46,9 +47,11 @@ import java.util.function.UnaryOperator;
  *
  * <h2>Threads</h2>
  *
- * <p>Commands are called on the GUI thread, heard in the frame. A strand's first message starts its process right
- * there, which is I/O on the GUI thread (docs/TODO.md), and later messages write one line to its stdin. The sign-in
- * check, which waits on a process, is the {@link CheckAccount} job's. Each process's
+ * <p>Commands are called on the GUI thread, heard in the frame. A message is shown at once and queued on its lane;
+ * starting the process (finding the CLI, writing the tools' config, launching it) and writing the queue to its stdin
+ * are the {@link Talk} job's, on the job lane, so the GUI thread never waits on a process. A lane has one drain at a
+ * time, which empties its queue in order, so two messages said quickly reach the agent in the order they were said.
+ * The sign-in check, which waits on a process, is the {@link CheckAccount} job's. Each process's
  * events arrive on its own reader thread, one at a time and in order ({@link AgentListener}), and each becomes one
  * commit to the {@link Model}, whose compare-and-set puts the lanes' commits in an order. Nothing here holds a lock
  * while committing, and nothing here is reached from a model listener.
@@ -88,6 +91,9 @@ final class Conductor implements AutoCloseable {
     /** What a strand is doing while its messages are kept back until Claude Code is signed in. */
     static final String WAITING_FOR_SIGN_IN = "waiting for sign-in";
 
+    /** The CLI's error when it has no sign-in, or has lost it: {@code Not logged in · Please run /login}. */
+    static final String AUTHENTICATION_FAILED = "authentication_failed";
+
     /** What the agent is told when the human says no. */
     static final String DENIED = "The human denied this in Maistro. Do not retry it; ask what they want instead.";
 
@@ -97,13 +103,31 @@ final class Conductor implements AutoCloseable {
     private final Model model;
     private final Launch launch;
     private final Toolset toolset;
+    private final Sender<Work.Deliver> deliveries;
     private final Map<String, Lane> lanes = new ConcurrentHashMap<>();
     private final AtomicLong checks = new AtomicLong();
 
-    Conductor(Model model, Launch launch, Toolset toolset) {
+    /**
+     * @param deliveries where a lane asks for its queue to be delivered: the {@link Talk} job's request, so the
+     *                   process is started and written to on the job lane
+     */
+    Conductor(Model model, Launch launch, Toolset toolset, Sender<Work.Deliver> deliveries) {
         this.model = model;
         this.launch = launch;
         this.toolset = toolset;
+        this.deliveries = deliveries;
+    }
+
+    /**
+     * Deliver strand {@code id}'s queued messages: start its process if it has none, and write them to it. Blocks on
+     * the process starting, so it is the {@link Talk} job's, on the job lane. A strand that has gone, or a lane that has
+     * been replaced since it asked, has nothing to deliver.
+     */
+    void deliver(String id) {
+        Lane l = lanes.get(id);
+        if (l != null) {
+            l.drain();
+        }
     }
 
     /** The main strand's lane. */
@@ -378,6 +402,22 @@ final class Conductor implements AutoCloseable {
         /** Messages said while the account was not known to be signed in, as they will be sent; see {@link #send}. */
         private final List<String> held = new ArrayList<>();
 
+        /** Messages on their way to the process, in order: written by {@link #drain}, on the job lane. */
+        private final List<String> outbox = new ArrayList<>();
+        /** Whether a delivery has been asked for and has not yet emptied {@link #outbox}. */
+        private boolean asked;
+        /** Whether a {@link #drain} is running: there is only ever one, so the messages keep their order. */
+        private boolean draining;
+        /** Set by {@link #close}: a closed lane starts nothing, whatever is still on its way to it. */
+        private boolean closed;
+        /**
+         * The messages written to the process whose turns have not ended yet, oldest first: each turn's end takes one
+         * off. The oldest is the one a sign-in failure is about, kept to send again ({@link #onApiError}).
+         */
+        private final java.util.ArrayDeque<String> unanswered = new java.util.ArrayDeque<>();
+        /** The turn in progress failed for want of a sign-in; its end says nothing more. See {@link #onApiError}. */
+        private boolean lostSignIn;
+
         private AgentSession session;
         private String lastSessionId = "";
         /** Which of this lane's processes is current; events from an older one are dropped. */
@@ -477,16 +517,69 @@ final class Conductor implements AutoCloseable {
             sendNow(out);
         }
 
+        /**
+         * Queue {@code prompts} for the process, and ask the {@link Talk} job to deliver them unless a delivery already
+         * asked for will. Returns at once: nothing here starts or writes to a process.
+         */
         private void sendNow(List<String> prompts) {
-            AgentSession s = sessionOrStart();
-            if (s == null) {
-                strand(x -> x.withActivity("not started", false));
-                return;
-            }
-            for (String p : prompts) {
-                if (!s.send(p)) {
-                    failed("Could not write to Claude Code: its process has gone.");
+            boolean ask;
+            synchronized (this) {
+                if (closed) {
                     return;
+                }
+                outbox.addAll(prompts);
+                ask = !asked;
+                asked = true;
+            }
+            if (ask) {
+                deliveries.send(new Work.Deliver(id));
+            }
+        }
+
+        /**
+         * Write the queued messages to the process, starting it first if it is not running, until the queue is empty.
+         * On the job lane: starting a process blocks. A drain already running carries on with whatever is queued
+         * meanwhile, so a second one returns at once and the messages keep their order.
+         */
+        void drain() {
+            synchronized (this) {
+                if (draining) {
+                    return;
+                }
+                draining = true;
+            }
+            while (true) {
+                List<String> batch;
+                synchronized (this) {
+                    // Both flags drop in the one block that sees the queue empty, so a message queued just after
+                    // either finds this drain still going (and is in its next batch) or asks for a new one.
+                    if (closed || outbox.isEmpty()) {
+                        outbox.clear();
+                        asked = false;
+                        draining = false;
+                        return;
+                    }
+                    batch = List.copyOf(outbox);
+                    outbox.clear();
+                }
+                AgentSession s = sessionOrStart();
+                if (s == null) {
+                    synchronized (this) {
+                        outbox.clear();
+                    }
+                    strand(x -> x.withActivity("not started", false));
+                    continue;
+                }
+                for (String p : batch) {
+                    wrote(p);
+                    if (!s.send(p)) {
+                        synchronized (this) {
+                            outbox.clear();
+                            unanswered.pollLast();
+                        }
+                        failed("Could not write to Claude Code: its process has gone.");
+                        break;
+                    }
                 }
             }
         }
@@ -503,10 +596,49 @@ final class Conductor implements AutoCloseable {
             return session;
         }
 
-        private synchronized AgentSession sessionOrStart() {
-            if (session != null && session.isRunning()) {
-                return session;
+        /** {@code prompt} is being written to the process: its turn is open until a result ends it. */
+        synchronized void wrote(String prompt) {
+            unanswered.addLast(prompt);
+        }
+
+        /**
+         * The running process, or a new one. Only {@link #drain} calls this, one at a time, so two never start at
+         * once. The lane's lock is not held while a process starts, so the GUI thread queueing a message, or
+         * interrupting, never waits on it; a lane closed meanwhile gets no process, and the one just started is ended.
+         */
+        private AgentSession sessionOrStart() {
+            int g;
+            String resume;
+            synchronized (this) {
+                if (session != null && session.isRunning()) {
+                    return session;
+                }
+                if (closed) {
+                    return null;
+                }
+                g = generation;
+                resume = lastSessionId;
             }
+            AgentSession started = start(g, resume);
+            if (started == null) {
+                return null;
+            }
+            boolean kept;
+            synchronized (this) {
+                kept = !closed && generation == g;
+                if (kept) {
+                    session = started;
+                }
+            }
+            if (!kept) {
+                started.close();
+                return null;
+            }
+            return started;
+        }
+
+        /** Start a process whose events count while the lane is at generation {@code g}. Blocks: the job lane's. */
+        private AgentSession start(int g, String resume) {
             ClaudeCli.Result found = ClaudeCli.locate(launch.claude());
             if (!found.isFound()) {
                 failed("Claude Code was not found: " + found.reason()
@@ -520,16 +652,16 @@ final class Conductor implements AutoCloseable {
                     .withModel(blankToNull(launch.model()))
                     .withPermissionMode(blankToNull(launch.permissionMode()))
                     .withWorkingDirectory(launch.cwd().isBlank() ? null : Path.of(launch.cwd()))
-                    .withResume(blankToNull(lastSessionId));
+                    .withResume(blankToNull(resume));
             try {
                 options = options.withMcpServer(toolset.config(), toolset.allowed());
             } catch (IOException e) {
                 LOG.warn("could not write the tools' config; starting Claude Code without them", e);
             }
             try {
-                session = AgentSession.start(options, new Current(generation));
+                AgentSession s = AgentSession.start(options, new Current(g));
                 LOG.info("started Claude Code for strand {} from {} ({})", id, exe, found.reason());
-                return session;
+                return s;
             } catch (IOException e) {
                 LOG.warn("could not start {}", exe, e);
                 failed("Could not start Claude Code: " + e.getMessage());
@@ -551,6 +683,9 @@ final class Conductor implements AutoCloseable {
                 session = null;
                 generation++;
                 held.clear();
+                unanswered.clear();
+                outbox.clear();
+                closed = true;
             }
             tools.clear();
             asks.clear();
@@ -774,10 +909,52 @@ final class Conductor implements AutoCloseable {
                     .withActivity(waitingOr(x, turn, "running " + a.tool()), true));
         }
 
+        /**
+         * An error the CLI made up itself. {@link #AUTHENTICATION_FAILED} is not one to show as a note: the account
+         * turns to signed out, which shows the sign-in card, and the message that failed is kept, as one said while
+         * signed out is, to go again once Check again finds the CLI signed in ({@link #release}).
+         */
         @Override
         public void onApiError(AgentEvent.ApiError e) {
+            if (AUTHENTICATION_FAILED.equals(e.error())) {
+                lostSignIn(e.text());
+                return;
+            }
             String what = e.text().isEmpty() ? e.error() : e.text();
             strand(s -> s.withTranscript(t -> t.append(n -> Turn.note(n, what, true))));
+        }
+
+        private void lostSignIn(String why) {
+            String prompt;
+            int later;
+            synchronized (this) {
+                lostSignIn = true;
+                prompt = unanswered.isEmpty() ? "" : unanswered.peekFirst();
+                later = Math.max(0, unanswered.size() - 1);
+                if (!prompt.isEmpty()) {
+                    held.add(prompt);
+                }
+            }
+            LOG.info("Claude Code says it is not signed in ({}); strand {} keeps its message", why, id);
+            update((d, s) -> {
+                Doc next = d.withAccount(a -> a.lost(why));
+                return prompt.isEmpty() ? next : next.withStrand(id, x -> x.withTranscript(t -> {
+                    // The message that failed is the human turn with `later` more said after it.
+                    List<Turn> humans = t.turns().stream().filter(turn -> turn.who() == Turn.Who.HUMAN).toList();
+                    int at = humans.size() - 1 - later;
+                    Turn human = at >= 0 ? humans.get(at) : null;
+                    if (human == null || human.chips().contains(Doc.Account.HELD)) {
+                        return t;
+                    }
+                    List<String> chips = new ArrayList<>(human.chips());
+                    chips.add(Doc.Account.HELD);
+                    return t.change(human.id(), r -> r.withChips(chips));
+                }));
+            });
+            // A check may have found it signed in again between the keep and that commit.
+            if (!model.doc().account().state().holds()) {
+                release();
+            }
         }
 
         /** The end of a turn: everything still growing stops, and the totals move on. */
@@ -786,15 +963,23 @@ final class Conductor implements AutoCloseable {
             remember(e.sessionId());
             tools.clear();
             asks.clear();
+            boolean signedOut;
+            boolean waiting;
+            synchronized (this) {
+                signedOut = lostSignIn;
+                lostSignIn = false;
+                unanswered.pollFirst();
+                waiting = !held.isEmpty();
+            }
             strand(s -> {
                 Doc.Strand next = s.withTranscript(t -> t.settle())
-                        .withActivity("idle", false)
+                        .withActivity(waiting ? WAITING_FOR_SIGN_IN : "idle", false)
                         .withAgent(a -> a.plus(e.costUsd(), e.numTurns(), e.usage().inputTokens(),
                                 e.usage().outputTokens()));
                 String why = e.resultText().isEmpty() ? e.subtype() : e.resultText();
                 Turn last = s.transcript().last();
                 boolean alreadySaid = last != null && last.who() == Turn.Who.NOTE && last.text().equals(why);
-                if (!e.success() && !alreadySaid) {
+                if (!e.success() && !alreadySaid && !signedOut) {
                     next = next.withTranscript(t -> t.append(n -> Turn.note(n, "The turn failed: " + why, true)));
                 }
                 return next;
@@ -812,6 +997,7 @@ final class Conductor implements AutoCloseable {
             asks.clear();
             synchronized (this) {
                 session = null;
+                unanswered.clear();
             }
             String note = e.exitCode() == 0
                     ? "Claude Code's process ended. The next message starts it again and resumes the conversation."

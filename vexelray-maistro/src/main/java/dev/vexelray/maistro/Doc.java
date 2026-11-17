@@ -499,6 +499,11 @@ record Doc(List<Strand> strands, String showing, Panes panes, Mind mind, String 
         Account checking() {
             return new Account(State.CHECKING, "", cli, "");
         }
+
+        /** Signed out mid-session, the CLI saying why ({@code detail}), with the CLI last asked kept for the card. */
+        Account lost(String detail) {
+            return new Account(State.SIGNED_OUT, "", cli, detail);
+        }
     }
 
     static Doc initial() {

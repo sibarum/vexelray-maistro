@@ -1,0 +1,15 @@
+# Ctrl+B with the composer holding the keyboard, a draft in it: the chord still branches. With fake-claude.cmd.
+await composer
+click composer
+type hello
+key ENTER
+await context.focus KV cache
+await status.agent idle
+click map.node.beta
+await context.focus Surprise score
+click composer
+type a draft
+key CTRL+B
+await strand.b1
+settle
+shot target/branch-from-composer.png

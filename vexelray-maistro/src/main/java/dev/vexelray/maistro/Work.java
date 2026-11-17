@@ -68,6 +68,14 @@ final class Work {
         static final Topic<AccountChecked> TOPIC = Topic.edge(AccountChecked.class);
     }
 
+    /**
+     * Deliver strand {@code strand}'s queued messages to its Claude Code, starting the process if it is not running.
+     * The messages stay on the strand's lane in the {@link Conductor}, in order; this says only whose to deliver.
+     */
+    record Deliver(String strand) {
+        static final Topic<Deliver> TOPIC = Topic.edge(Deliver.class);
+    }
+
     /** Write the settings store to disk: what is remembered between runs changed in memory. */
     record SaveSettings() {
         static final Topic<SaveSettings> TOPIC = Topic.edge(SaveSettings.class);

@@ -256,7 +256,7 @@ final class ConversationPane {
         shownAccount = a;
         signInTitle.text(out ? "Claude Code isn't signed in" : "Maistro needs Claude Code");
         signInBody.text(out
-                ? "Maistro runs Claude Code as it is set up on this machine, and it has no account yet. Sign in once"
+                ? "Maistro runs Claude Code as it is set up on this machine, and it is not signed in. Sign in once"
                         + " from a terminal, with the command below; every copy of Claude Code here shares it. Then"
                         + " press Check again."
                 : "Claude Code was not found: " + a.detail() + ".");
