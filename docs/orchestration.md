@@ -3,7 +3,7 @@
 How Maistro runs a large project: one continuous **main agent** the human talks to, which delegates to **task
 agents**, which may split their work across **subtask agents**. This is a design, not built yet. It extends what
 exists: today a conversation is a main strand plus flat branches (`Doc.Strand`), and this makes those strands a
-tree with roles. The way every agent works is in [engineering-charter.md](engineering-charter.md). The tools
+tree with roles. It sits under [design.md](design.md). The way every agent works is in [engineering-charter.md](engineering-charter.md). The tools
 they act through are in [agent-tools.md](agent-tools.md).
 
 ## The shape

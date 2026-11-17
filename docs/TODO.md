@@ -5,8 +5,8 @@ Work on **Maistro** that is known about and not done. Distinct from
 if the fix belongs upstream, it goes there instead.
 
 Keep an entry short enough that it does not need editing, and delete it when it is done rather than ticking it.
-The design is [gui-design-guide.md](gui-design-guide.md); its *Gaps* and *Design principles* sections are the
-longer list this is drawn from.
+The design is [design.md](design.md), whose *Milestones* are the longer list this is drawn from. The window's
+layout and look are in [gui-design-guide.md](gui-design-guide.md).
 
 ## Next
 

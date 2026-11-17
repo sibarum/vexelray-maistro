@@ -8,6 +8,10 @@ tokens) in a context stream on the right. The layout, palette and ideas come fro
 [docs/gui-design-guide.md](docs/gui-design-guide.md). It was generated from the `vexel-desktop` template; the editor
 that template starts as is gone.
 
+Where it is going is [docs/design.md](docs/design.md): one main agent the human talks to, running a large project
+through task and subtask agents, with tools that need no shell, and with memory and coordination kept in files
+that can be audited.
+
 ## Run it
 
 ```

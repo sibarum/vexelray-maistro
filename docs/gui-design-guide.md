@@ -10,6 +10,9 @@ it then, and treat this file as a snapshot, not the authority.
 
 Snapshot taken 2026-10-17 (artifact version `1792282697-a7c4`).
 
+Since 2026-11-17, [design.md](design.md) is the top of the design. This guide still holds for the layout and the
+visual language. Its ideas carry over as design.md's *The window* reinterprets them for the agent tree.
+
 ## Layout (left to right)
 
 | Region | What it is |

@@ -2,8 +2,10 @@
 
 Maistro is Claude Code with hands: a VexelRay desktop client that runs the Claude Code CLI as a child process
 (`agent/`, its stream-json protocol), shows the conversation beside a mind map the agent's replies grow (`map/`),
-and will drive the other VexelRay applications through `ottermate`. The design is
-[docs/gui-design-guide.md](docs/gui-design-guide.md). It was generated from `vexelray-framework`'s `vexel-desktop`
+and will drive the other VexelRay applications through `ottermate`. Where it is going, a main agent running large
+projects through trees of task agents, is [docs/design.md](docs/design.md), the top of the design; the window's
+layout and visual language are in [docs/gui-design-guide.md](docs/gui-design-guide.md). Every agent works by
+[docs/engineering-charter.md](docs/engineering-charter.md), and so do you here. It was generated from `vexelray-framework`'s `vexel-desktop`
 template, and the editor that template starts as has been removed. [README.md](README.md) is the tour: read its
 *How it is put together* section before changing anything, and `Recipes.java` before adding a part.
 

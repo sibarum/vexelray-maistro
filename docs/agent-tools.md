@@ -2,7 +2,8 @@
 
 A set of tools Maistro serves to the agent, alongside `apps`, `tree`, `find` and `shot`, for the work the agent now
 does through the CLI's `Bash`, `Read`, `Write` and `Edit`. Not built yet. This is the design to agree before it
-touches `Recipes.java`. The agents that use these tools, and how they are organized, are described in
+touches `Recipes.java`. It sits under [design.md](design.md), whose milestones set the order. The agents that use
+these tools, and how they are organized, are described in
 [orchestration.md](orchestration.md). How they build is in [engineering-charter.md](engineering-charter.md).
 
 ## Why not just the shell
