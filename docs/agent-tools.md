@@ -204,7 +204,9 @@ be found by what it relates to and not only by its words.
 
 - `id` is a kebab-case slug, stable for the memory's life, so renaming its title breaks no link.
 - `kind` is one of `user`, `feedback`, `project`, `reference` and `fact`.
-- `scope` is `user` (everywhere), `project` (one repository) or `session`.
+- The graph belongs to one main agent ([orchestration.md](orchestration.md)), and is shared by that main's tasks
+  and subtasks and by nobody else. Within it, `scope` is `main` (everything this main does), `project` (one
+  repository) or `session` (one agent's life).
 - `source` records the session and turn it came from, so every memory can be traced to its evidence.
 
 **A relationship** is `{from, to, relation, note}`. The relation comes from a fixed set, so links can be queried
@@ -221,11 +223,22 @@ rather than read: `about`, `part-of`, `depends-on`, `supports`, `contradicts`, `
 | `delete` | Leaves a tombstone. Refuses while links point at the memory, unless `unlink: true` | undoable |
 | `link`, `unlink` | Adds or removes a relationship. Refuses one whose ends do not exist | undoable |
 | `history` | Every change to one memory, with who made it | read |
+| `export` | Writes a memory and its subtree (by relation and depth) to a folder as files, for other mains and for people | undoable |
+| `open` | Reads a folder of exported memories as a read-only graph that `get` and `search` can include, and that this graph's links can point into | read |
 
-**Stored as an append-only log**: `~/.maistro/memory/<scope>/log.jsonl`, one event per line (`added`, `updated`,
+**Stored as an append-only log**: `~/.maistro/mains/<main>/memory/log.jsonl`, one event per line (`added`, `updated`,
 `deleted`, `linked`, `unlinked`), with each event's version and session. The graph is that log folded. This
 gives history and undo directly, lets several agents append at once (each append holds the log's lockfile for one
 line), and never loses an old version. A compacted snapshot beside the log keeps loading fast.
+
+**Exported to disk, as documentation.** A main's own log is private to it, though it is still a plain file
+that anyone can audit. To share what a main knows, it exports a subtree: one Markdown file per memory, named by its
+id. Each file has front matter (`id`, `kind`, `version`, `source`) and its relationships as typed links
+(`supersedes: [[older-id]]`), and the body is the memory itself. The files sit beside the project's other docs,
+and are reviewed and committed like them. Exporting again rewrites only the files that changed, so a diff shows
+exactly what the main learned. Another main reads them with `open` and never copies them into its own log. A
+link into them names the file, so what it rests on stays visible. Starting a new main opens nothing: it begins
+empty, and opens exported trees only when it reads that documentation.
 
 **Rules the graph keeps:** no dangling link; `supersedes` marks the older memory as superseded but keeps it; a
 `contradicts` link is shown on both memories whenever either is read, so a conflict is never silently half-seen.

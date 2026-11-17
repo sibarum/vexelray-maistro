@@ -27,6 +27,22 @@ toolset). Main is given `spawn` for tasks, a task is given `spawn` for subtasks,
 at all. An agent cannot call a tool it was never listed, so the limit cannot be talked around. That follows the
 house rule that the earliest check wins.
 
+**There can be several mains.** Each is a tree of its own: one main with its tasks and subtasks, and **its own
+memory graph**. Mains do not share memory. What one main has learned, another learns only if the human or a
+document tells it. They do still see each other: blast radius, `who` and the watcher count every agent on the
+system, whichever main it belongs to. So two mains working one checkout never collide unseen, even though each
+keeps its own understanding. A task's or subtask's memory is its main's: they read and write that graph, and no
+other.
+
+**The filesystem is the only thing shared, and all of it is auditable.** A memory tree or subtree can be written
+to disk as files, beside the project's other documentation. Once it is there, any main can read it, and that is
+the only way one main's knowledge reaches another. There is no hidden channel between mains, and nothing is shared
+that a person cannot open, read, diff and commit. Briefs and reports are files too.
+
+**A new main is always a clean slate.** It starts with no memory, and knows only what it reads: the project's
+documentation, including any memory trees written there. Nothing carries over invisibly from an earlier main, so
+how a main reached its conclusions can always be traced to files.
+
 The human usually speaks only to main. Any task or subtask can still be opened and spoken to directly, as a
 branch's tab is today. What is said there goes into that agent's next report, so main never loses track.
 
