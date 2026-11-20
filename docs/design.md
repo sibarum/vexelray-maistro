@@ -36,7 +36,7 @@ These decide between designs. When two designs both work, the one that keeps mor
    exported memory are files beside the project's documentation, readable, diffable and committable. Nothing passes
    between mains through a hidden channel.
 3. **A new main is a clean slate.** It knows only what it reads. How it reached its conclusions can always be traced
-   to files.
+   to files. The shared retrieval model is skill, not content: it ranks what a main can already see.
 4. **Context is spent where the work is.** The main's context holds conversation, digests and documentation. Code
    and transcripts stay with the task and subtask agents. Nothing flows up the tree raw.
 5. **No shell between intent and effect.** Agents act through typed tools whose only escaping rule is JSON's. Text
@@ -81,6 +81,57 @@ These decide between designs. When two designs both work, the one that keeps mor
   be exported to Markdown files beside the docs, which is the only way it reaches another main.
 - **The relay.** It joins the account's devices, carrying reports, messages and the human's conversation with
   main. A phone or a browser is a thin client: the conversation and the map, and nothing else.
+
+## Learning from use: retrieval that gets better
+
+As Maistro is used, it fine-tunes a small specialist **instruct-embedding** model. The model learns which problems
+lie close to which builds, tests and resolutions, so a search of the history brings back the past work most
+likely to help, and Maistro can fetch it without being asked.
+
+**The unit is an episode**: a problem statement, the builds and tests run against it, and how it was resolved.
+Maistro already records every part of one:
+
+| Stage | Where it comes from |
+| --- | --- |
+| problem statement | the human's message, a task's brief, a failing test's output, a build error |
+| build | `run` results: the command, exit code, and the diagnostics in its output |
+| test | `run` results for tests: which failed, then which passed |
+| resolution | the journal's diffs and patches, the commit, the task's `done` report, and decisions recorded as memories |
+
+Episodes are cut from the journal, `run` results, git and reports. **The labels come from the work itself.** A
+failing test that passes after a diff ties that problem to that resolution, so nobody has to label anything. A
+resolution that is later undone or reverted counts against the pairing.
+
+**Training.** Contrastive pairs are drawn from adjacent stages of one episode: problem ↔ resolution, failing test
+↔ fix, build error ↔ the change that cleared it. Other episodes in the batch serve as negatives. Each side carries
+an instruction saying what it is for, for example *represent this build failure, to find what fixed similar
+ones*, so that one model serves several kinds of search. The base model is small, and fine-tuning is
+parameter-efficient (an adapter), so training runs locally, in the background, as a separate process, never in
+Maistro's frame loop or on its tool threads.
+
+**A new version must beat the last one before it is used.** Each version is scored on held-out episodes (recall@k
+of the true resolution for each problem) and replaces the current one only if it does better. Versions are kept,
+so a regression can be rolled back. This is the charter applied to the model.
+
+**Using it.** Inference runs in-process through a native runtime over Panama FFM, so it needs no reflection and
+works in the native image. Its index is a file per corpus, beside what it indexes. It is used in three places:
+
+- **Memory and history search**: `search` in `maistro-mem`, and a history search over episodes, rank by the model
+  as well as by text and links.
+- **Auto-fetch**: when a problem statement arrives (a brief, a failing test, a build error), the nearest past
+  resolutions are fetched and offered to the agent, each marked as fetched rather than chosen, with its score and
+  the file it came from. This is the earlier design's "daydreaming" retrieval, made concrete.
+- **The context stream's vector-index section** shows what was fetched and why. It stops being a placeholder.
+
+**Audit, and the clean slate.** Every fetched result cites a file: the episode, the memory or the commit. A
+retrieval can always be checked against its source. The model's weights rank what a main can see. They never
+supply content.
+
+**One model, shared by every main** (decided 2026-11-17). It trains on the episodes of every main and ranks for all
+of them, a new main included. It is learned skill, not shared memory: it knows which kinds of problem lie near
+which kinds of resolution, and it holds no facts a main could read out of it. A main still retrieves only from
+the corpora it can see, its own log and the files it has opened. So the clean slate holds for content, and every
+result still cites its file.
 
 ## The window
 
@@ -134,15 +185,18 @@ One at a time. Each milestone is finished, seen working under `ottermate`, and w
    branches become tasks.
 5. **The map as the project.** Task nodes, their states, and the digest moving them; the context stream for the
    agent on screen; the action timeline with Undo.
-6. **Coordination.** Blast radius from the journals and from Claude Code transcripts; the native watcher on
+6. **Learned retrieval.** Cutting episodes from the journal, `run`, git and reports; text search over them first;
+   then the base embedding model in process, with its index; then local fine-tuning, evaluation and promotion;
+   then auto-fetch.
+7. **Coordination.** Blast radius from the journals and from Claude Code transcripts; the native watcher on
    Windows, then Linux and macOS; `external_changes`; locks.
-7. **Driving the apps.** The acting `ottermate` tools (`click`, `type`, `key`, `settle`, `await`) through the
+8. **Driving the apps.** The acting `ottermate` tools (`click`, `type`, `key`, `settle`, `await`) through the
    permission prompt, and live app panes.
-8. **The browser.** Reading tools first, then acting, then `eval`.
-9. **Across devices.** The relay, device enrolment, placing tasks on other machines, and the thin client.
+9. **The browser.** Reading tools first, then acting, then `eval`.
+10. **Across devices.** The relay, device enrolment, placing tasks on other machines, and the thin client.
 
 The order follows dependencies. The tree needs tools to act with and memory to compact into. The map needs the
-tree. Coordination matters once several agents write at once. The relay comes last, because everything it
+tree. Learned retrieval needs the episodes that the journal, `run`, git and reports record. Coordination matters once several agents write at once. The relay comes last, because everything it
 carries must exist first.
 
 ## Open questions
@@ -157,7 +211,8 @@ These are gathered from the detail documents. Each is answered there, and remove
   `Edit` once Maistro's toolsets are proven.
 - **Which browser:** the Edge or Chrome already installed, or a pinned Chromium.
 - **Claude Code's own memory:** whether it is opened as an exported tree, imported, or left alone.
-- **Memory search:** text and links first; embeddings later or never.
+- **The base model and its runtime:** which small instruct-embedding model to start from, and whether to run it on
+  ONNX Runtime or llama.cpp. Training, too, needs a runtime that Maistro can drive as a process.
 - **From the earlier design:** how app states are made canonical, how a carve is scoped, and how a late no
   calibrates the agent ([gui-design-guide.md](gui-design-guide.md)).
 - **Naming:** the test stand-in under `src/test/relay/` clashes with the relay, and one of them is renamed.

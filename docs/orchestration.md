@@ -41,7 +41,9 @@ that a person cannot open, read, diff and commit. Briefs and reports are files t
 
 **A new main is always a clean slate.** It starts with no memory, and knows only what it reads: the project's
 documentation, including any memory trees written there. Nothing carries over invisibly from an earlier main, so
-how a main reached its conclusions can always be traced to files.
+how a main reached its conclusions can always be traced to files. The one thing every main shares is the retrieval
+model ([design.md](design.md), *Learning from use*). It is learned skill, and it ranks only what a main can
+already see. It supplies no content.
 
 The human usually speaks only to main. Any task or subtask can still be opened and spoken to directly, as a
 branch's tab is today. What is said there goes into that agent's next report, so main never loses track.

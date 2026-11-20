@@ -217,7 +217,7 @@ rather than read: `about`, `part-of`, `depends-on`, `supports`, `contradicts`, `
 | Tool | Does | Tag |
 | --- | --- | --- |
 | `get` | One memory, and its neighbourhood to a depth | read |
-| `search` | By text, kind, scope or relation; matches ranked, with their links | read |
+| `search` | By text, kind, scope or relation; matches ranked (by text, then also by the learned embedding, as in design.md's *Learning from use*), with their links | read |
 | `list` | Memories by scope and kind, newest first | read |
 | `add` | A new memory, optionally with its first links. Refuses an id that is taken, and suggests the memory it may duplicate | undoable |
 | `update` | Changes fields, with `expect_version`, so two agents cannot overwrite each other unseen | undoable |
@@ -444,5 +444,5 @@ a logged-in run (TODO.md), and these slices lean on it as much as `shot` does.
 - **Which browser**: the Edge or Chrome already installed (proposed), or a pinned Chromium Maistro downloads and
   keeps, which gives the same version everywhere at the cost of a download of about 150 MB.
 - **The memory graph and Claude Code's own memory**: replace it, import it once, or keep both in sync?
-- **Memory search**: text and links at first. Whether to add embeddings, the context pane's vector index, is for
-  later.
+- **Memory search**: text and links at first, then ranked as well by the specialist embedding model that Maistro
+  fine-tunes as it is used (design.md, *Learning from use*).
