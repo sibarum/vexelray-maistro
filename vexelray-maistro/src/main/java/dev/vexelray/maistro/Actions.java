@@ -1,5 +1,6 @@
 package dev.vexelray.maistro;
 
+import dev.vexelray.maistro.agent.AuthLogin;
 import dev.vexelray.maistro.archive.Conversation;
 import dev.vexelray.maistro.archive.ConversationCodec;
 import dev.vexelray.maistro.archive.Summary;
@@ -21,13 +22,18 @@ final class Actions {
     private final Conductor conductor;
     private final Archive archive;
     private final Sender<Work.AccountCheck> checks;
+    private final Sender<Work.SignIn> signIns;
+    private final Sender<Work.StopSignIn> stopSignIns;
 
-    Actions(Model model, Ui ui, Conductor conductor, Archive archive, Sender<Work.AccountCheck> checks) {
+    Actions(Model model, Ui ui, Conductor conductor, Archive archive, Sender<Work.AccountCheck> checks,
+            Sender<Work.SignIn> signIns, Sender<Work.StopSignIn> stopSignIns) {
         this.model = model;
         this.ui = ui;
         this.conductor = conductor;
         this.archive = archive;
         this.checks = checks;
+        this.signIns = signIns;
+        this.stopSignIns = stopSignIns;
         ui.conversation().onSend(conductor::send);
         ui.conversation().onAnswer(conductor::answer);
         ui.conversation().onAlways(conductor::answerAlways);
@@ -35,11 +41,31 @@ final class Actions {
         ui.conversation().onStrands(conductor::show, this::merge, conductor::abandon);
         ui.context().onBranch(this::branch);
         ui.conversation().onCheckAccount(this::checkAccount);
+        ui.conversation().onSignIn(this::signIn, this::cancelSignIn);
     }
 
     /** Ask Claude Code whether it is signed in. At startup, and on Check again; the answer is {@link CheckAccount}'s. */
     void checkAccount() {
         checks.send(conductor.checkAccount());
+    }
+
+    /** Sign Claude Code in, in the browser, with {@code method}: the sign-in card's buttons. */
+    void signIn(AuthLogin.Method method) {
+        signIns.send(conductor.signIn(method));
+    }
+
+    /** Stop the sign-in in progress: the card's Cancel. */
+    void cancelSignIn() {
+        if (conductor.cancelSignIn()) {
+            stopSignIns.send(new Work.StopSignIn());
+        }
+    }
+
+    /** A sign-in ended; signed in, ask the CLI again, which is what says so. */
+    void signInEnded(Work.SignInEnded ended) {
+        if (conductor.signInEnded(ended.attempt(), ended.stopped(), ended.signedIn(), ended.problem())) {
+            checkAccount();
+        }
     }
 
     /** Merge branch {@code id} into the main strand, or say why not. */

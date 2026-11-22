@@ -15,6 +15,7 @@ import dev.vexelray.gui.widget.IconButton;
 import dev.vexelray.gui.widget.ListView;
 import dev.vexelray.gui.widget.Nodes;
 import dev.vexelray.gui.widget.SelectionModel;
+import dev.vexelray.maistro.agent.AuthLogin;
 import dev.vexelray.maistro.archive.Summary;
 import dev.vexelray.gui.widget.TextField;
 import dev.vexelray.maistro.chat.Transcript;
@@ -87,11 +88,19 @@ final class ConversationPane {
     private Node signInBody;
     private Node signInCommand;
     private Node signInCommandBox;
+    private Node signInDetail;
+    private Node signInChoices;
+    private Node signInManual;
+    private Node signInWaiting;
+    private Node signInLink;
     private Node signInFoot;
     private Button copy;
+    private Button copyLink;
     /** The account the card last said something about, so checking again keeps the card up. */
     private volatile Doc.Account shownAccount;
     private volatile Runnable checkAccount = () -> { };
+    private volatile Consumer<AuthLogin.Method> signIn = m -> { };
+    private volatile Runnable cancelSignIn = () -> { };
 
     private volatile Consumer<String> send = text -> { };
     private volatile Answer answer = (turn, allow) -> { };
@@ -189,9 +198,12 @@ final class ConversationPane {
     }
 
     /**
-     * Over the transcript while Claude Code is not signed in, or not found: what is wrong, the command that puts it
-     * right, and Check again. Not an error in the transcript, since nothing has failed yet, and not in the way of
-     * the composer: a message sent meanwhile is kept until it can go. Built once; {@link #showAccount} fills it.
+     * Over the transcript while Claude Code is not signed in, or not found: what is wrong and what puts it right. Signed
+     * out, that is Sign in, which opens the browser ({@code claude auth login}, with SSO and a Console account beside
+     * it), and below it the same done by hand: the command, and Check again. Signing in, it is what to do in the
+     * browser, the page's address for a browser that did not open, and Cancel. Not an error in the transcript, since
+     * nothing has failed yet, and not in the way of the composer: a message sent meanwhile is kept until it can go.
+     * Built once; {@link #showAccount} fills it.
      */
     private Node signIn() {
         signInTitle = gui.text("").font(Type.UI).textSize(Type.BODY).textColor(gui.theme().color(Role.INK))
@@ -199,25 +211,63 @@ final class ConversationPane {
         gui.landmark(Landmarks.SIGN_IN_TITLE, signInTitle);
         signInBody = gui.text("").font(Type.UI).textSize(Type.BODY).textColor(gui.theme().color(Role.DIM))
                 .wordWrap(true).width(Length.FILL);
+        signInDetail = gui.text("").font(Type.UI).textSize(Type.BODY).textColor(gui.theme().color(Role.INK))
+                .wordWrap(true).width(Length.FILL);
+        gui.landmark(Landmarks.SIGN_IN_DETAIL, signInDetail);
+
+        Button browser = new Button(gui, "Sign in").kind(Button.Kind.PRIMARY);
+        Presses.on(gui, browser, () -> signIn.accept(AuthLogin.Method.SUBSCRIPTION));
+        gui.landmark(Landmarks.SIGN_IN_BROWSER, browser.node());
+        Button sso = new Button(gui, "Use SSO").kind(Button.Kind.SECONDARY);
+        Presses.on(gui, sso, () -> signIn.accept(AuthLogin.Method.SSO));
+        gui.landmark(Landmarks.SIGN_IN_SSO, sso.node());
+        Button console = new Button(gui, "Use a Console account").kind(Button.Kind.SECONDARY);
+        Presses.on(gui, console, () -> signIn.accept(AuthLogin.Method.CONSOLE));
+        gui.landmark(Landmarks.SIGN_IN_CONSOLE, console.node());
+        signInChoices = gui.row().gap(Type.TIGHT).alignItems(AlignItems.CENTER)
+                .children(browser.node(), sso.node(), console.node());
+
         signInCommand = gui.text("").font(Type.MONO).textSize(Type.CODE).textColor(gui.theme().color(Role.INK))
                 .wordWrap(true).width(Length.FILL);
-        signInCommandBox = gui.row()
-                .width(Length.FILL)
-                .padding(Type.TIGHT, Type.TIGHT)
-                .corner(Length.dp(4))
-                .background(gui.theme().color(Role.RAISED))
-                .children(signInCommand);
+        signInCommandBox = codeBox(signInCommand);
         gui.landmark(Landmarks.SIGN_IN_COMMAND, signInCommand);
-        Button check = new Button(gui, "Check again").kind(Button.Kind.PRIMARY);
+        Button check = new Button(gui, "Check again").kind(Button.Kind.SECONDARY);
         Presses.on(gui, check, () -> checkAccount.run());
         gui.landmark(Landmarks.SIGN_IN_CHECK, check.node());
         copy = new Button(gui, "Copy command").kind(Button.Kind.SECONDARY);
         Presses.on(gui, copy,
                 () -> gui.clipboard().set(signInCommand(shownAccount == null ? "" : shownAccount.cli())));
         gui.landmark(Landmarks.SIGN_IN_COPY, copy.node());
-        signInFoot = gui.text("Messages you send meanwhile are kept, and go out once it is signed in.")
-                .font(Type.UI).textSize(Type.BODY).textColor(gui.theme().color(Role.FAINT))
+        signInManual = gui.column()
+                .width(Length.FILL)
+                .gap(Type.TIGHT)
+                .alignItems(AlignItems.STRETCH)
+                .children(faint("Or sign in from a terminal, then press Check again:"), signInCommandBox,
+                        gui.row().gap(Type.TIGHT).alignItems(AlignItems.CENTER).children(check.node(), copy.node()));
+
+        signInLink = gui.text("").font(Type.MONO).textSize(Type.CODE).textColor(gui.theme().color(Role.INK))
                 .wordWrap(true).width(Length.FILL);
+        gui.landmark(Landmarks.SIGN_IN_LINK, signInLink);
+        copyLink = new Button(gui, "Copy link").kind(Button.Kind.SECONDARY);
+        Presses.on(gui, copyLink, () -> {
+            Doc.Account a = shownAccount;
+            if (a != null && !a.link().isEmpty()) {
+                gui.clipboard().set(a.link());
+            }
+        });
+        gui.landmark(Landmarks.SIGN_IN_COPY_LINK, copyLink.node());
+        Button cancel = new Button(gui, "Cancel").kind(Button.Kind.SECONDARY);
+        Presses.on(gui, cancel, () -> cancelSignIn.run());
+        gui.landmark(Landmarks.SIGN_IN_CANCEL, cancel.node());
+        signInWaiting = gui.column()
+                .width(Length.FILL)
+                .gap(Type.TIGHT)
+                .alignItems(AlignItems.STRETCH)
+                .children(faint("Browser didn't open? Open this address in it:"), codeBox(signInLink),
+                        gui.row().gap(Type.TIGHT).alignItems(AlignItems.CENTER)
+                                .children(copyLink.node(), cancel.node()));
+
+        signInFoot = faint("Messages you send meanwhile are kept, and go out once it is signed in.");
         signInCard = gui.column()
                 .width(Length.FILL)
                 .padding(Type.GUTTER, Type.GUTTER)
@@ -225,8 +275,7 @@ final class ConversationPane {
                 .alignItems(AlignItems.STRETCH)
                 .border(Length.dp(1), gui.theme().color(Role.ACCENT))
                 .corner(Length.dp(6))
-                .children(signInTitle, signInBody, signInCommandBox,
-                        gui.row().gap(Type.TIGHT).alignItems(AlignItems.CENTER).children(check.node(), copy.node()),
+                .children(signInTitle, signInBody, signInDetail, signInChoices, signInWaiting, signInManual,
                         signInFoot);
         gui.landmark(Landmarks.SIGN_IN, signInCard);
         signInWrap = gui.column()
@@ -238,14 +287,37 @@ final class ConversationPane {
         return signInWrap;
     }
 
+    /** A line of small print on the card. */
+    private Node faint(String text) {
+        return gui.text(text).font(Type.UI).textSize(Type.BODY).textColor(gui.theme().color(Role.FAINT))
+                .wordWrap(true).width(Length.FILL);
+    }
+
+    /** {@code text}, a command or an address, on the raised ground code is shown on. */
+    private Node codeBox(Node text) {
+        return gui.row()
+                .width(Length.FILL)
+                .padding(Type.TIGHT, Type.TIGHT)
+                .corner(Length.dp(4))
+                .background(gui.theme().color(Role.RAISED))
+                .children(text);
+    }
+
     /** What Check again does. */
     void onCheckAccount(Runnable handler) {
         this.checkAccount = handler;
     }
 
+    /** What the sign-in buttons do, given the account to sign in with, and what Cancel does. */
+    void onSignIn(Consumer<AuthLogin.Method> handler, Runnable cancel) {
+        this.signIn = handler;
+        this.cancelSignIn = cancel;
+    }
+
     /** Show the sign-in card for {@code a}, or hide it. */
     synchronized void showAccount(Doc.Account a) {
         boolean out = a.state() == Doc.Account.State.SIGNED_OUT;
+        boolean signingIn = a.state() == Doc.Account.State.SIGNING_IN;
         boolean checking = a.state() == Doc.Account.State.CHECKING;
         boolean shown = a.state().card() || checking && shownAccount != null && shownAccount.state().card();
         signInWrap.visible(shown);
@@ -254,16 +326,26 @@ final class ConversationPane {
             return;
         }
         shownAccount = a;
-        signInTitle.text(out ? "Claude Code isn't signed in" : "Maistro needs Claude Code");
-        signInBody.text(out
-                ? "Maistro runs Claude Code as it is set up on this machine, and it is not signed in. Sign in once"
-                        + " from a terminal, with the command below; every copy of Claude Code here shares it. Then"
-                        + " press Check again."
-                : "Claude Code was not found: " + a.detail() + ".");
-        signInCommand.text(out ? signInCommand(a.cli()) : "");
-        signInCommandBox.visible(out);
-        copy.node().visible(out);
-        signInFoot.visible(out);
+        if (signingIn) {
+            signInTitle.text("Finish signing in in your browser");
+            signInBody.text("Claude Code opened its sign-in page in your browser. Maistro carries on by itself once"
+                    + " you are done there.");
+            signInLink.text(a.link().isEmpty() ? "Waiting for Claude Code to say where the page is…" : a.link());
+            copyLink.node().visible(!a.link().isEmpty());
+        } else {
+            signInTitle.text(out ? "Claude Code isn't signed in" : "Maistro needs Claude Code");
+            signInBody.text(out
+                    ? "Maistro runs Claude Code as it is set up on this machine, and it is not signed in. Sign in"
+                            + " once, in your browser; every copy of Claude Code here shares it."
+                    : "Claude Code was not found: " + a.detail() + ".");
+            signInCommand.text(out ? signInCommand(a.cli()) : "");
+        }
+        signInDetail.text(out && !a.detail().isEmpty() ? "Claude Code said: " + a.detail() : "");
+        signInDetail.visible(out && !a.detail().isEmpty());
+        signInChoices.visible(out);
+        signInManual.visible(out);
+        signInWaiting.visible(signingIn);
+        signInFoot.visible(out || signingIn);
     }
 
 

@@ -14,8 +14,10 @@ import sibarum.probe.Log;
  *
  * <p>The CLI keeps its credentials in its config directory ({@code ~/.claude}), shared by every copy on the machine,
  * and answers without its terminal UI and without the network. Signed out, version 2.1.304 prints
- * {@code {"loggedIn": false, "authMethod": "none", ...}} and exits with 1. Only {@code loggedIn} and
- * {@code authMethod} are read: the signed-in shape has not been recorded yet (docs/TODO.md).
+ * {@code {"loggedIn": false, "authMethod": "none", ...}} and exits with 1. Signed in, 2.1.330 prints
+ * {@code {"loggedIn": true, "authMethod": "claude.ai", ...}} and exits with 0, with the account's email, organisation,
+ * subscription and expiry beside them ({@code src/test/resources/agent/real-auth-status-signed-in.json}). Only
+ * {@code loggedIn} and {@code authMethod} are read.
  *
  * @param signedIn what {@code loggedIn} said; meaningless when {@link #known} is false
  * @param known    the CLI answered in that shape. False for an older CLI without {@code auth}, one that did not

@@ -1,0 +1,21 @@
+await status.account signed out
+await signin.title isn't signed in
+settle
+shot target/signin-browser-card.png
+click composer
+type Hello while signed out
+key ENTER
+await status.agent waiting for sign-in
+click signin.browser
+await status.account signing in
+await signin.link https://claude.ai/oauth/authorize
+settle
+shot target/signin-browser-waiting.png
+click signin.cancel
+await status.account signed out
+await signin.title isn't signed in
+click signin.browser
+await status.account signed in
+await status.agent idle
+settle
+shot target/signin-browser-done.png

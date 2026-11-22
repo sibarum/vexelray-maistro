@@ -447,11 +447,17 @@ record Doc(List<Strand> strands, String showing, Panes panes, Mind mind, String 
      * @param state  what is known
      * @param method how it is signed in, as the CLI says it ({@code claude.ai}, ...); empty when it did not say
      * @param cli    the CLI that was asked; empty until one was found
-     * @param detail why nothing is known, or why there is no CLI; empty otherwise
+     * @param detail why nothing is known, why there is no CLI, or why it is signed out when the CLI said why (a
+     *               sign-in that failed, one that lapsed mid-session); empty otherwise
+     * @param link   while signing in, the sign-in page's address once the CLI has printed it; empty otherwise
      */
-    record Account(State state, String method, String cli, String detail) {
+    record Account(State state, String method, String cli, String detail, String link) {
 
         static final Account CHECKING = new Account(State.CHECKING, "", "", "");
+
+        Account(State state, String method, String cli, String detail) {
+            this(state, method, cli, detail, "");
+        }
 
         /** The chip on a message kept back until Claude Code is signed in. */
         static final String HELD = "held · sends once Claude Code is signed in";
@@ -464,6 +470,8 @@ record Doc(List<Strand> strands, String showing, Panes panes, Mind mind, String 
             CHECKING("checking sign-in", true, false),
             SIGNED_IN("signed in", false, false),
             SIGNED_OUT("signed out", true, true),
+            /** {@code claude auth login} is running, waiting on the person in the browser. */
+            SIGNING_IN("signing in", true, true),
             /** No CLI was found; a message goes on to say so, as it did before there was a check. */
             NO_CLI("Claude Code not found", false, true),
             /** The CLI did not say (too old, too slow, or it could not be run); nothing is kept back. */
@@ -500,9 +508,22 @@ record Doc(List<Strand> strands, String showing, Panes panes, Mind mind, String 
             return new Account(State.CHECKING, "", cli, "");
         }
 
-        /** Signed out mid-session, the CLI saying why ({@code detail}), with the CLI last asked kept for the card. */
+        /**
+         * Signed out, the CLI saying why ({@code detail}, empty when it did not): mid-session, or a sign-in that
+         * failed or was cancelled. The CLI last asked is kept for the card.
+         */
         Account lost(String detail) {
             return new Account(State.SIGNED_OUT, "", cli, detail);
+        }
+
+        /** Signing in, in the browser, with the CLI last asked; the page's address is not known yet. */
+        Account signingIn() {
+            return new Account(State.SIGNING_IN, "", cli, "");
+        }
+
+        /** The sign-in page is at {@code url}. */
+        Account withLink(String url) {
+            return new Account(state, method, cli, detail, url);
         }
     }
 

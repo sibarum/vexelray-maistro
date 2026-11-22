@@ -1,6 +1,7 @@
 package dev.vexelray.maistro;
 
 import dev.vexelray.maistro.agent.AgentEvent;
+import dev.vexelray.maistro.agent.AuthLogin;
 import dev.vexelray.maistro.agent.Json;
 import dev.vexelray.maistro.chat.Turn;
 import dev.vexelray.maistro.tools.McpServer;
@@ -116,6 +117,62 @@ class ConductorTest {
                 new Doc.Account(Doc.Account.State.SIGNED_IN, "test", "", ""));
         assertEquals(List.of(new Work.Deliver(Doc.MAIN)), deliveries);
         assertFalse(human("hello").chips().contains(Doc.Account.HELD));
+    }
+
+    private Doc.Account account() {
+        return model.doc().account();
+    }
+
+    @Test
+    void signingInShowsItsLinkThenChecksAgain() {
+        notLoggedIn();
+        Work.SignIn s = conductor.signIn(AuthLogin.Method.SSO);
+        assertEquals(AuthLogin.Method.SSO, s.method());
+        assertEquals(Doc.Account.State.SIGNING_IN, account().state());
+        assertTrue(account().state().holds(), "messages wait for the sign-in");
+        assertTrue(account().state().card());
+        assertEquals("signing in", account().says());
+        conductor.signInLink(s.attempt(), "https://claude.ai/x");
+        assertEquals("https://claude.ai/x", account().link());
+        assertTrue(conductor.signInEnded(s.attempt(), false, true, ""), "signed in: ask the CLI, which says so");
+    }
+
+    @Test
+    void aFailedSignInIsSignedOutWithTheClisReason() {
+        Work.SignIn s = conductor.signIn(AuthLogin.Method.SUBSCRIPTION);
+        assertFalse(conductor.signInEnded(s.attempt(), false, false, "Couldn't log in"));
+        assertEquals(Doc.Account.State.SIGNED_OUT, account().state());
+        assertEquals("Couldn't log in", account().detail());
+    }
+
+    @Test
+    void cancellingIsSignedOutAtOnceAndTheRunsEndSaysNothing() {
+        Work.SignIn s = conductor.signIn(AuthLogin.Method.SUBSCRIPTION);
+        assertTrue(conductor.cancelSignIn());
+        assertEquals(Doc.Account.State.SIGNED_OUT, account().state());
+        assertEquals("", account().detail(), "a cancel is not a failure to explain");
+        conductor.signInLink(s.attempt(), "https://claude.ai/late");
+        assertEquals("", account().link());
+        assertFalse(conductor.signInEnded(s.attempt(), true, false, ""));
+        assertEquals(Doc.Account.State.SIGNED_OUT, account().state());
+        assertFalse(conductor.cancelSignIn(), "nothing left to stop");
+    }
+
+    @Test
+    void aNewerSignInOvertakesAnOlderOne() {
+        Work.SignIn first = conductor.signIn(AuthLogin.Method.SUBSCRIPTION);
+        Work.SignIn second = conductor.signIn(AuthLogin.Method.CONSOLE);
+        assertFalse(conductor.signInEnded(first.attempt(), true, false, ""), "the first was stopped for the second");
+        assertEquals(Doc.Account.State.SIGNING_IN, account().state());
+        assertTrue(conductor.signInEnded(second.attempt(), false, true, ""));
+    }
+
+    @Test
+    void aCheckStillOutCannotPutTheCardBackUnderASignIn() {
+        Work.AccountCheck check = conductor.checkAccount();
+        conductor.signIn(AuthLogin.Method.SUBSCRIPTION);
+        conductor.accountChecked(check.check(), new Doc.Account(Doc.Account.State.SIGNED_OUT, "", "", ""));
+        assertEquals(Doc.Account.State.SIGNING_IN, account().state());
     }
 
     @Test

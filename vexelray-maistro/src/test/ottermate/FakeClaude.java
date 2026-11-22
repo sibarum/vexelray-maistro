@@ -28,6 +28,14 @@ public class FakeClaude {
             authStatus(Path.of(args[1]));
             return;
         }
+        if (args[0].equals(STATUS_AFTER_LOGIN)) {
+            authStatusAfterLogin(Path.of(args[1]));
+            return;
+        }
+        if (args[0].equals(LOGIN)) {
+            authLogin(Path.of(args[1]));
+            return;
+        }
         List<String> all = Files.readAllLines(Path.of(args[0]), StandardCharsets.UTF_8);
         Path heard = Path.of(args[1]);
         Files.createDirectories(heard.toAbsolutePath().getParent());
@@ -99,6 +107,64 @@ public class FakeClaude {
                 ? "{\"loggedIn\": true, \"authMethod\": \"fake\"}"
                 : "{\"loggedIn\": false, \"authMethod\": \"none\"}");
         System.exit(asked ? 0 : 1);
+    }
+
+    /**
+     * In place of the turn: answer {@code claude auth status --json} signed in only once {@link #LOGIN} has signed this
+     * Maistro in. The state is kept in {@code file} as {@code <maistro pid> <logins tried> [in]}.
+     */
+    private static final String STATUS_AFTER_LOGIN = "--auth-status-after-login";
+
+    /**
+     * In place of the turn: {@code claude auth login}, as the real one prints it through a pipe (its lead, then the page's
+     * address on a line of its own). The first time one Maistro asks, it waits there until it is ended, as a person who
+     * never finishes in the browser would leave it, so Cancel has something to stop. Every time after, it is signed in at
+     * once: {@code Login successful.} and exit 0.
+     */
+    private static final String LOGIN = "--auth-login";
+
+    private static long maistro() {
+        return ProcessHandle.current().parent().flatMap(ProcessHandle::parent).map(ProcessHandle::pid).orElse(-1L);
+    }
+
+    /** {@code file}'s words if this Maistro wrote them, else none. */
+    private static String[] loginState(Path file) throws IOException {
+        if (!Files.exists(file)) {
+            return new String[0];
+        }
+        String[] words = Files.readString(file, StandardCharsets.UTF_8).strip().split(" ");
+        return words[0].equals(Long.toString(maistro())) ? words : new String[0];
+    }
+
+    private static void authStatusAfterLogin(Path file) throws IOException {
+        String[] state = loginState(file);
+        boolean in = state.length > 2 && state[2].equals("in");
+        System.out.println(in
+                ? "{\"loggedIn\": true, \"authMethod\": \"fake\"}"
+                : "{\"loggedIn\": false, \"authMethod\": \"none\"}");
+        System.exit(in ? 0 : 1);
+    }
+
+    private static void authLogin(Path file) throws IOException {
+        String[] state = loginState(file);
+        int tried = (state.length > 1 ? Integer.parseInt(state[1]) : 0) + 1;
+        Files.createDirectories(file.toAbsolutePath().getParent());
+        Files.writeString(file, maistro() + " " + tried, StandardCharsets.UTF_8);
+        System.out.println("Opening browser to sign in…");
+        System.out.println("If the browser didn't open, visit:");
+        System.out.println("https://claude.ai/oauth/authorize?code=true&client_id=fake&state=" + tried);
+        if (tried == 1) {
+            while (true) {
+                try {
+                    Thread.sleep(60_000);
+                } catch (InterruptedException e) {
+                    return;
+                }
+            }
+        }
+        Files.writeString(file, maistro() + " " + tried + " in", StandardCharsets.UTF_8);
+        System.out.println("Login successful.");
+        System.exit(0);
     }
 
     /** Read until a line of {@code type}; false if the input closed first. */

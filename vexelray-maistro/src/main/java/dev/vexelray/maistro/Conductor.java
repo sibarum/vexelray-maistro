@@ -4,6 +4,7 @@ import dev.vexelray.maistro.agent.AgentEvent;
 import dev.vexelray.maistro.agent.AgentListener;
 import dev.vexelray.maistro.agent.AgentProcess;
 import dev.vexelray.maistro.agent.AgentSession;
+import dev.vexelray.maistro.agent.AuthLogin;
 import dev.vexelray.maistro.agent.AuthStatus;
 import dev.vexelray.maistro.agent.ClaudeCli;
 import dev.vexelray.maistro.agent.JsonValue;
@@ -106,6 +107,7 @@ final class Conductor implements AutoCloseable {
     private final Sender<Work.Deliver> deliveries;
     private final Map<String, Lane> lanes = new ConcurrentHashMap<>();
     private final AtomicLong checks = new AtomicLong();
+    private final AtomicLong signIns = new AtomicLong();
 
     /**
      * @param deliveries where a lane asks for its queue to be delivered: the {@link Talk} job's request, so the
@@ -192,6 +194,56 @@ final class Conductor implements AutoCloseable {
                 l.release();
             }
         }
+    }
+
+    /**
+     * Start signing in, in the browser, with {@code method}: say so in the model, and return the request for the
+     * {@link SignInWithBrowser} source. A check still out says nothing once this starts, so its answer cannot put the
+     * card back to signed out under the sign-in. Its link comes back to {@link #signInLink}, its end to
+     * {@link #signInEnded}.
+     */
+    Work.SignIn signIn(AuthLogin.Method method) {
+        checks.incrementAndGet();
+        long n = signIns.incrementAndGet();
+        model.change(d -> d.withAccount(Doc.Account::signingIn));
+        return new Work.SignIn(n, launch.claude(), method);
+    }
+
+    /**
+     * Cancel the sign-in in progress: signed out again at once, and whatever the run says when it ends says nothing.
+     * False when no sign-in is in progress, so there is nothing to stop.
+     */
+    boolean cancelSignIn() {
+        if (model.doc().account().state() != Doc.Account.State.SIGNING_IN) {
+            return false;
+        }
+        signIns.incrementAndGet();
+        model.change(d -> d.withAccount(a -> a.lost("")));
+        return true;
+    }
+
+    /** Sign-in {@code n}'s page is at {@code url}. Said of a sign-in cancelled or overtaken, it says nothing. */
+    void signInLink(long n, String url) {
+        if (signIns.get() != n || model.doc().account().state() != Doc.Account.State.SIGNING_IN) {
+            return;
+        }
+        model.change(d -> d.withAccount(a -> a.withLink(url)));
+    }
+
+    /**
+     * Sign-in {@code n} ended. Signed in, true: the account is to be checked again ({@link #checkAccount}), which is
+     * what says so and lets the kept messages go. Otherwise signed out, with the CLI's reason on the card. Said of a
+     * sign-in cancelled or overtaken, it says nothing.
+     */
+    boolean signInEnded(long n, boolean stopped, boolean signedIn, String problem) {
+        if (signIns.get() != n || model.doc().account().state() != Doc.Account.State.SIGNING_IN) {
+            return false;
+        }
+        if (signedIn) {
+            return true;
+        }
+        model.change(d -> d.withAccount(a -> a.lost(stopped ? "" : problem)));
+        return false;
     }
 
     /** Stop the turn in progress in the strand on screen. */

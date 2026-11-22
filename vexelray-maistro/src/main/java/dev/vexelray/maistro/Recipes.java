@@ -139,7 +139,8 @@ final class Recipes {
 
     /** Every command. The chords for them, zoom's among them, are {@link Screen}'s. */
     @Provides
-    Actions actions(Model model, Ui ui, Conductor conductor, Archive archive, Sender<Work.AccountCheck> checks) {
-        return new Actions(model, ui, conductor, archive, checks);
+    Actions actions(Model model, Ui ui, Conductor conductor, Archive archive, Sender<Work.AccountCheck> checks,
+                    Sender<Work.SignIn> signIns, Sender<Work.StopSignIn> stopSignIns) {
+        return new Actions(model, ui, conductor, archive, checks, signIns, stopSignIns);
     }
 }

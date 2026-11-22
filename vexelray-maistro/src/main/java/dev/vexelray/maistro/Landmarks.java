@@ -95,14 +95,25 @@ final class Landmarks {
     static final String CONTEXT_FOCUS = "context.focus";
 
     /**
-     * The card over the transcript while Claude Code is not signed in, or not found; unshown otherwise. Its title says
-     * which, {@code signin.command} is the command that signs in, and the two buttons copy it and check again.
+     * The card over the transcript while Claude Code is not signed in, signing in, or not found; unshown otherwise. Its
+     * title says which, and {@code signin.detail} what the CLI said when a sign-in failed. Signed out,
+     * {@code signin.browser}, {@code signin.sso} and {@code signin.console} sign in in the browser;
+     * {@code signin.command} is the command that does it by hand, and the two buttons below it copy it and check
+     * again. Signing in, {@code signin.link} is the sign-in page's address once the CLI has said it, beside Copy link
+     * and Cancel.
      */
     static final String SIGN_IN = "signin";
     static final String SIGN_IN_TITLE = "signin.title";
+    static final String SIGN_IN_DETAIL = "signin.detail";
+    static final String SIGN_IN_BROWSER = "signin.browser";
+    static final String SIGN_IN_SSO = "signin.sso";
+    static final String SIGN_IN_CONSOLE = "signin.console";
     static final String SIGN_IN_COMMAND = "signin.command";
     static final String SIGN_IN_COPY = "signin.copy";
     static final String SIGN_IN_CHECK = "signin.check";
+    static final String SIGN_IN_LINK = "signin.link";
+    static final String SIGN_IN_COPY_LINK = "signin.copylink";
+    static final String SIGN_IN_CANCEL = "signin.cancel";
 
     /** The status line, and its slots. */
     static final String STATUS = "status";

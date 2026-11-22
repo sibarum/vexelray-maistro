@@ -1,5 +1,6 @@
 package dev.vexelray.maistro;
 
+import dev.vexelray.maistro.agent.AuthLogin;
 import dev.vexelray.maistro.archive.Summary;
 import sibarum.atchung.Topic;
 
@@ -9,7 +10,8 @@ import java.util.List;
 /**
  * Slow work, as messages: each request is heard by a {@code @Job} on the framework's job lane, and each reply by
  * {@link Screen} on the GUI thread. The disk and the CLI's sign-in check go here, never on the GUI thread, whose time
- * is the frame's.
+ * is the frame's. Signing in waits on the person in the browser, for as long as they take, so it is a source's
+ * ({@link SignInWithBrowser}), on a thread of its own, rather than a job holding one of the job lane's few.
  *
  * <p>Until vexelray-gui 0.2 this was the {@code Gui}'s offload executor, handed a lambda. A job is not a closure: its
  * request and its reply are deeply immutable values, so nothing of a caller's state can be reached from the job lane.
@@ -66,6 +68,33 @@ final class Work {
     /** What the CLI said, for check {@code check}. */
     record AccountChecked(long check, Doc.Account account) {
         static final Topic<AccountChecked> TOPIC = Topic.edge(AccountChecked.class);
+    }
+
+    /**
+     * Sign the CLI {@code claude} (empty: find it) in, in the browser, with {@code method}: the {@code attempt}th time
+     * of asking. Heard by the {@link SignInWithBrowser} source, which runs {@code claude auth login} on a thread of its
+     * own for as long as the person takes; a newer request stops the run in progress first.
+     */
+    record SignIn(long attempt, String claude, AuthLogin.Method method) {
+        static final Topic<SignIn> TOPIC = Topic.edge(SignIn.class);
+    }
+
+    /** Stop the sign-in in progress, ending the CLI's {@code auth login}: Cancel on the card. */
+    record StopSignIn() {
+        static final Topic<StopSignIn> TOPIC = Topic.edge(StopSignIn.class);
+    }
+
+    /** The sign-in page for attempt {@code attempt} is at {@code url}, for a browser that did not open. */
+    record SignInLink(long attempt, String url) {
+        static final Topic<SignInLink> TOPIC = Topic.edge(SignInLink.class);
+    }
+
+    /**
+     * Sign-in attempt {@code attempt} ended: {@code stopped} before the CLI did, or the CLI ended saying it is
+     * {@code signedIn}, or not, for the reason in {@code problem}.
+     */
+    record SignInEnded(long attempt, boolean stopped, boolean signedIn, String problem) {
+        static final Topic<SignInEnded> TOPIC = Topic.edge(SignInEnded.class);
     }
 
     /**

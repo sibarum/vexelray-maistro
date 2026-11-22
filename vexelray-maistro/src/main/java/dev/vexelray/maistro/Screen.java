@@ -119,6 +119,16 @@ final class Screen {
     }
 
     @Subscribe
+    public void signInLink(Work.SignInLink link) {
+        conductor.signInLink(link.attempt(), link.url());
+    }
+
+    @Subscribe
+    public void signInEnded(Work.SignInEnded ended) {
+        actions.signInEnded(ended);
+    }
+
+    @Subscribe
     public void opened(WindowOpened opened) {
         if (!opened.main()) {
             return;

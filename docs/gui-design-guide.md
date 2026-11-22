@@ -130,16 +130,22 @@ The CLI manages them without its terminal UI: `claude auth status --json` (`{"lo
 - **Signed out shows a card, not an error.** In place of the empty transcript: "Claude Code isn't signed in", the
   CLI's path, and how to sign in. The composer stays usable: a message sent while signed out is kept, marked "sends
   once you're signed in", and goes out when sign-in is seen. Signing in never gates writing.
-- **Signing in happens in the browser.** The card's button runs `auth login` (the subscription by default, a
-  Console account as the alternative) as its own process; the card waits with a Cancel, then checks again.
+- **Signing in happens in the browser.** The card's Sign in runs `auth login` (the subscription; Use SSO and Use a
+  Console account beside it) on a thread of its own, a source (`SignInWithBrowser`), and the account is *signing
+  in*. The card then says to finish in the browser, shows the page's address with Copy link for a browser that did
+  not open, and offers Cancel, which ends the CLI. When the CLI ends signed in, the account is checked again, which
+  sends what was kept. A failure puts the card back with the CLI's words. Signing in by hand stays below the
+  buttons: the command, Copy command and Check again.
 - **Losing it mid-session** (the CLI's `authentication_failed` error) turns the account to signed out and shows
   the same card, keeping the failed message to resend, instead of two red notes.
 - **Settings shows the account**: method, CLI path, Sign out. A key from the environment is shown, not offered
   for change.
 
 Slices, in order: the status check, card and kept message (the card says what to run); sign-in from the button;
-mid-session expiry; the Settings view. Not yet known: whether `auth login` works with no terminal (it may ask for a
-pasted code), and what `auth status --json` says when signed in.
+mid-session expiry; the Settings view. The first three are built. Answered 2026-11-21: `auth login` through pipes
+asks for no pasted code (claude.exe 2.1.330 prompts for one only when its input and output are both terminals) and
+ends by itself once the browser calls it back; signed in, `auth status --json` says `"loggedIn": true,
+"authMethod": "claude.ai"` with exit code 0 (`src/test/resources/agent/real-auth-status-signed-in.json`).
 
 ### Open questions
 

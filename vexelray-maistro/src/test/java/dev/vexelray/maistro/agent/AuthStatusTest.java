@@ -41,6 +41,23 @@ class AuthStatusTest {
         assertEquals("claude.ai", s.method());
     }
 
+    /**
+     * {@code real-auth-status-signed-in.json}: what claude.exe 2.1.330 printed signed in with a Claude subscription
+     * (exit code 0), its email, organisation and expiry replaced.
+     */
+    @Test
+    void signedInAsTheCliSaysIt() throws Exception {
+        String recorded;
+        try (java.io.InputStream in = AuthStatusTest.class.getResourceAsStream(
+                "/agent/real-auth-status-signed-in.json")) {
+            recorded = new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+        }
+        AuthStatus s = AuthStatus.parse(recorded);
+        assertTrue(s.known());
+        assertTrue(s.signedIn());
+        assertEquals("claude.ai", s.method());
+    }
+
     @Test
     void aLineAroundTheJsonDoesNotHideIt() {
         assertTrue(AuthStatus.parse("warning: something\n" + SIGNED_OUT + "\n").known());

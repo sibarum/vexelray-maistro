@@ -283,6 +283,15 @@ letting it go:
 ottermate --script src/test/ottermate/signin.txt --launch mvn.cmd compile exec:exec -Dautomation=0 "-Dapp.args=--claude=src/test/ottermate/fake-claude-signed-out.cmd"
 ```
 
+`fake-claude-login.cmd` is signed out until its `auth login` signs it in, and prints the sign-in page's address as the
+real CLI does. The first `auth login` a Maistro runs waits until it is ended, as if nobody finished in the browser;
+every one after signs in at once. `signin-browser.txt` uses it: Sign in, the card waiting with the link, Cancel, then
+Sign in again letting the held message go:
+
+```
+ottermate --script src/test/ottermate/signin-browser.txt --launch mvn.cmd compile exec:exec -Dautomation=0 "-Dapp.args=--claude=src/test/ottermate/fake-claude-login.cmd"
+```
+
 `fake-claude-expired.cmd` says it is signed in and then answers every message as the real CLI answers one it
 cannot take (`replay-not-logged-in.jsonl`, recorded): `expired.txt` checks that losing the sign-in mid-session shows
 the card and keeps the message, with no red notes.

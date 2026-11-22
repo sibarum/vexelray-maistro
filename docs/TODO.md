@@ -13,12 +13,14 @@ layout and look are in [gui-design-guide.md](gui-design-guide.md).
 - [ ] Ending a strand's process still happens on the GUI thread (New conversation, Abandon, Merge, Ctrl+O):
       `AgentSession.close` waits up to a second for the CLI to exit and two more for its reader. Starting one is the
       `Talk` job's now; ending one could be too.
-- [ ] Signing in (guide, *Signing in*), after the status check, card and mid-session expiry: sign in from the card's
-      button (`claude auth login`, with Cancel; find out whether it needs a terminal or a pasted code), and the
+- [ ] Signing in (guide, *Signing in*), after the status check, card, mid-session expiry and the card's Sign in: the
       account in Settings with Sign out. Also find out whether a CLI already running picks up a sign-in made after it
       started: the message kept on `authentication_failed` goes back to the same process.
-- [ ] Record `claude auth status --json` from a signed-in CLI into `src/test/resources/agent/` and test the parser
-      on it; only the signed-out shape has been seen.
+- [ ] See the card's Sign in with the real CLI and a real browser, and SSO and a Console account at all. Only the
+      stand-in (`signin-browser.txt`) has been driven; the real `auth login` was run once by hand from a terminal.
+- [ ] The scripts assume the conversation pane is up, but the panes come back as the last run left them, and a run
+      that hid the conversation makes every script fail at `click composer`. A launch option, or the scripts showing
+      it, would make them independent of the last run.
 
 - [ ] Agent tools: record a real `tools/call` from a logged-in run (only the handshake is recorded,
       `real-mcp-handshake.jsonl`). The relay (`src/test/relay/`) plays one by the specification, and Maistro answers it,
