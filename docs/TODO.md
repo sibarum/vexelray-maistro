@@ -22,10 +22,13 @@ layout and look are in [gui-design-guide.md](gui-design-guide.md).
       that hid the conversation makes every script fail at `click composer`. A launch option, or the scripts showing
       it, would make them independent of the last run.
 
-- [ ] Agent tools: record a real `tools/call` from a logged-in run (only the handshake is recorded,
-      `real-mcp-handshake.jsonl`). The relay (`src/test/relay/`) plays one by the specification, and Maistro answers it,
-      shot included. Then slice 2, the driving tools (`click`, `type`, `key`, `settle`, `await`) through the permission
-      prompt.
+- [ ] Agent tools, slice 2 of the tools foundation (agent-tools.md): `Journal`, then `write`, `edit`, `undo`,
+      `history`, through the permission prompt.
+- [ ] A structured tool result shows in the transcript as its raw JSON, cut off: the CLI hands back the
+      `structuredContent` as the result's text (`real-mcp-structured-call.jsonl`), not the summary line beside it.
+      The row should show the summary, which Maistro made and can keep by tool-use id.
+- [ ] The relay is told Maistro's servers (`RELAY_MCP_SERVERS`, default `maistro,maistro-fs`), since `cmd` does not
+      pass it `--mcp-config`. A new server means a new default there.
 - [ ] The relay ends an interrupted turn as `error_during_execution`, a guess: record what a logged-in CLI sends.
 - [ ] See a real reply drawn on the map. The pipeline is tested headless, and seen end to end only as far as the
       CLI's "Not logged in": the desktop app's bundled `claude.exe` needs `claude auth login` once.

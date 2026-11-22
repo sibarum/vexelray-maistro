@@ -13,6 +13,10 @@ import dev.vexelray.maistro.tools.AppTools;
 import dev.vexelray.maistro.tools.Apps;
 import dev.vexelray.maistro.tools.McpServer;
 import dev.vexelray.maistro.tools.Toolset;
+import dev.vexelray.maistro.tools.files.FileTools;
+import dev.vexelray.maistro.tools.files.Paths;
+import dev.vexelray.maistro.spi.FileNames;
+import java.nio.file.Path;
 import java.util.List;
 import sibarum.atchung.Sender;
 
@@ -108,21 +112,25 @@ final class Recipes {
                         @Setting(value = "permissionMode", def = "default") String permissionMode,
                         @Setting(value = "cwd", def = "") String cwd,
                         Sender<Work.Deliver> deliveries) {
-        return new Conductor(model, new Conductor.Launch(claude, agentModel, permissionMode, cwd), toolset(),
+        return new Conductor(model, new Conductor.Launch(claude, agentModel, permissionMode, cwd), toolset(cwd),
                 deliveries);
     }
 
     /**
-     * The tools Maistro gives the agent, served from this process over the CLI's own pipes: the read-only ones that
-     * look at the other running VexelRay applications ({@link AppTools}). They run without asking, since none of them
-     * changes anything. Their config file and the pictures {@code shot} passes through live under the application's
-     * home; nothing is written until a process starts. Owned, and closed, by the conductor.
+     * The tools Maistro gives the agent, served from this process over the CLI's own pipes, one MCP server per
+     * toolset (docs/agent-tools.md): {@code maistro}, which looks at the other running VexelRay applications
+     * ({@link AppTools}), and {@code maistro-fs}, which reads files and folders ({@link FileTools}), relative paths
+     * taken from {@code cwd} as the agent's are. Every tool here only reads, so all run without asking. Their config
+     * file and the pictures {@code shot} passes through live under the application's home; nothing is written until
+     * a process starts. Owned, and closed, by the conductor.
      */
-    private static Toolset toolset() {
+    private static Toolset toolset(String cwd) {
         AppHome home = AppHome.of(Maistro.APP);
         AppTools apps = new AppTools(Apps.LOCAL, home.file("shots"));
-        return new Toolset(new McpServer("maistro", Maistro.APP, apps.tools()), home.file("mcp.json"),
-                List.of("apps", "tree", "find", "shot"));
+        Path working = (cwd.isBlank() ? Path.of("") : Path.of(cwd)).toAbsolutePath().normalize();
+        FileTools files = new FileTools(new Paths(FileNames.current(), working));
+        return new Toolset(List.of(new McpServer("maistro", Maistro.APP, apps.tools()),
+                new McpServer("maistro-fs", Maistro.APP, files.tools())), home.file("mcp.json"));
     }
 
     /**

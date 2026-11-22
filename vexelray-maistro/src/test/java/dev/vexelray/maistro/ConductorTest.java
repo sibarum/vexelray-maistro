@@ -37,8 +37,7 @@ class ConductorTest {
     void setUp() {
         model = new Model();
         model.change(d -> d.withAccount(a -> new Doc.Account(Doc.Account.State.SIGNED_IN, "test", "", "")));
-        Toolset tools = new Toolset(new McpServer("maistro", "test", List.of()), home.resolve("mcp.json"),
-                List.of());
+        Toolset tools = new Toolset(List.of(new McpServer("maistro", "test", List.of())), home.resolve("mcp.json"));
         conductor = new Conductor(model, new Conductor.Launch(home.resolve("no-claude.exe").toString(), "", "", ""),
                 tools, Sender.collecting(Work.Deliver.TOPIC, deliveries));
     }

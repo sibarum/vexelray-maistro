@@ -13,9 +13,10 @@ import java.util.Map;
  *
  * <p>{@link #answer} takes one message and gives the reply to send back. It handles what the CLI was recorded sending
  * ({@code src/test/resources/agent/real-mcp-handshake.jsonl}): {@code initialize}, {@code notifications/initialized}
- * and {@code tools/list}, and {@code tools/call}, which follows the MCP specification and has not been seen from this
- * CLI yet, because seeing one needs a logged-in run. Every message is answered, a notification with an empty result
- * as the CLI accepted in that recording, since the CLI waits on each.
+ * and {@code tools/list}; and {@code tools/call} ({@code real-mcp-tool-call.jsonl}, claude.exe 2.1.330), which is as
+ * the MCP specification has it, its {@code params} carrying a {@code _meta} beside {@code name} and
+ * {@code arguments} ({@code claudecode/toolUseId}, {@code progressToken}) that nothing here needs. Every message is
+ * answered, a notification with an empty result as the CLI accepted in that recording, since the CLI waits on each.
  *
  * <p>Answering may run a tool, so it may block: call it on a tool thread ({@link Toolset}).
  */
@@ -48,13 +49,23 @@ public final class McpServer {
         return name;
     }
 
-    /** The CLI's {@code --mcp-config} for this server: in this process, reached over the control channel. */
-    public JsonValue config() {
-        return JsonValue.Obj.builder()
-                .put("mcpServers", JsonValue.Obj.builder()
-                        .put(name, JsonValue.Obj.builder().put("type", "sdk").put("name", name).build())
-                        .build())
-                .build();
+    /**
+     * This server's entry under {@code mcpServers} in the CLI's {@code --mcp-config}: in this process, reached over
+     * the control channel. {@link Toolset} puts every server's entry in one config.
+     */
+    public JsonValue configEntry() {
+        return JsonValue.Obj.builder().put("type", "sdk").put("name", name).build();
+    }
+
+    /** The full names of the tools that only read, which run without asking ({@link Tool#readOnly}). */
+    public List<String> readOnlyNames() {
+        List<String> out = new ArrayList<>();
+        for (Tool t : tools.values()) {
+            if (t.readOnly()) {
+                out.add(qualified(t.name()));
+            }
+        }
+        return out;
     }
 
     /** The full name the agent knows {@code tool} by. */
@@ -94,10 +105,14 @@ public final class McpServer {
     private JsonValue list() {
         List<JsonValue> out = new ArrayList<>();
         for (Tool t : tools.values()) {
-            out.add(JsonValue.Obj.builder()
+            JsonValue.Obj.Builder b = JsonValue.Obj.builder()
                     .put("name", t.name())
                     .put("description", t.description())
-                    .put("inputSchema", t.inputSchema())
+                    .put("inputSchema", t.inputSchema());
+            if (t.outputSchema().isObject()) {
+                b.put("outputSchema", t.outputSchema());
+            }
+            out.add(b.put("annotations", JsonValue.Obj.builder().put("readOnlyHint", t.readOnly()).build())
                     .build());
         }
         return new JsonValue.Arr(out);
@@ -110,11 +125,17 @@ public final class McpServer {
             return Tool.Result.error("Maistro has no tool " + tool + "; it has " + String.join(", ", tools.keySet()));
         }
         JsonValue args = params.get("arguments");
+        Tool.Result r;
         try {
-            return t.call(args.isObject() ? args : JsonValue.Obj.EMPTY);
+            r = t.call(args.isObject() ? args : JsonValue.Obj.EMPTY);
         } catch (RuntimeException e) {
             return Tool.Result.error(tool + " failed: " + e);
         }
+        if (!r.isError() && t.outputSchema().isObject() && !r.structured().isObject()) {
+            // The CLI checks a success against the declared schema; a result it would refuse is a bug here, said here.
+            return Tool.Result.error(tool + " failed: it declares an output schema and gave no structured result");
+        }
+        return r;
     }
 
     private static JsonValue result(JsonValue id, JsonValue result) {

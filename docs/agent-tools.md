@@ -1,7 +1,8 @@
 # Agent tools: a proposal
 
 A set of tools Maistro serves to the agent, alongside `apps`, `tree`, `find` and `shot`, for the work the agent now
-does through the CLI's `Bash`, `Read`, `Write` and `Edit`. Not built yet. This is the design to agree before it
+does through the CLI's `Bash`, `Read`, `Write` and `Edit`. Slice 1 is built (see *Slices, in order*); the rest is
+not. This is the design to agree before it
 touches `Recipes.java`. It sits under [design.md](design.md), whose milestones set the order. The agents that use
 these tools, and how they are organized, are described in
 [orchestration.md](orchestration.md). How they build is in [engineering-charter.md](engineering-charter.md).
@@ -427,8 +428,24 @@ allows more.
 11. The headless browser: reading tools first (`open`, `text`, `tree`, `shot`), then acting, then `eval`.
 
 Each slice gets unit tests and an `ottermate` check: a tool call played through the relay (`src/test/relay/`), with
-its turn seen in the transcript. One thing is still unproven: the CLI's real `tools/call` has not been recorded from
-a logged-in run (TODO.md), and these slices lean on it as much as `shot` does.
+its turn seen in the transcript.
+
+**Slice 1 is built (2026-11-22).** What it settled, beside what is above:
+
+- The CLI's real `tools/call` is as the MCP specification has it, with a `_meta` (`claudecode/toolUseId`,
+  `progressToken`) nothing needs (`src/test/resources/agent/real-mcp-tool-call.jsonl`). Given two in-process servers
+  in one config, it shakes hands with each by name and routes each call to its own (`real-mcp-structured-call.jsonl`).
+- It hands the agent a structured result as the JSON of its `structuredContent`, not the summary line, so the agent
+  reads every field. `McpServer` turns a success that declares an `outputSchema` and gives no structure into an error
+  rather than send one the CLI would refuse, and the tests hold every result to its schema (`SchemaCheck`).
+- What runs without asking is `Tool.readOnly()`, sent as MCP's `readOnlyHint`, not a second list of names:
+  `Toolset.allowed()` is every read-only tool of every server.
+- Windows' naming rules are an OS module's (`spi/FileNames`, `WindowsFileNames`), as the build's isolation check
+  requires; `tools/files/Paths` names no OS.
+- `tree` answers a flat list in walk order, each entry with its depth, rather than nested objects, so its schema
+  needs no recursion. `search` matches within a line; a pattern spanning lines finds nothing.
+- `.gitignore` is read by `Ignores`, checked path by path against `git check-ignore` in its test. The person's
+  global excludes file is not read: a tool sees the repository as everyone sharing it does.
 
 ## Open questions
 

@@ -233,8 +233,17 @@ public final class AppTools {
         return s.build();
     }
 
+    /**
+     * A tool that only looks: every one here lists, reads a tree or takes a picture, so each runs without asking.
+     * The acting tools ({@code click}, {@code type}, ...) will not be made here.
+     */
     private static Tool tool(String name, String description, JsonValue schema, Function<JsonValue, Tool.Result> run) {
         return new Tool() {
+            @Override
+            public boolean readOnly() {
+                return true;
+            }
+
             @Override
             public String name() {
                 return name;

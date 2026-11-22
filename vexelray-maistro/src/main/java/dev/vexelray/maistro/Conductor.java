@@ -85,7 +85,10 @@ final class Conductor implements AutoCloseable {
             reads your replies in a conversation pane beside a mind map of the conversation, so prefer short \
             sections with clear headings over long walls of text. Maistro's own tools look at the running VexelRay \
             desktop applications: apps lists them, tree and find read a window's semantic tree, and shot shows you a \
-            window. Use them when asked about one of those applications. To drive one (keys, clicks, typing), use \
+            window. Use them when asked about one of those applications. Its maistro-fs tools read files and \
+            folders without a shell: stat, list, tree, read and search, each answering in structured JSON, with \
+            text decoded only in an encoding it names. Prefer them to Bash for looking at files. \
+            To drive an application (keys, clicks, typing), use \
             ottermate through the shell (C:/Users/User/Documents/GitHub/vexelray-gui/vexelray-gui-automation-cli/ottermate, \
             guide at vexelray-gui/docs/guides/ottermate.md).""";
 
@@ -899,11 +902,11 @@ final class Conductor implements AutoCloseable {
             if (s == null) {
                 return;
             }
-            if (!e.serverName().equals(toolset.name())) {
+            if (!toolset.serves(e.serverName())) {
                 s.refuse(e.requestId(), "Maistro has no MCP server " + e.serverName());
                 return;
             }
-            toolset.handle(e.message(), reply -> s.answerMcp(e.requestId(), reply));
+            toolset.handle(e.serverName(), e.message(), reply -> s.answerMcp(e.requestId(), reply));
         }
 
         /** A request Maistro has no answer for gets an error rather than silence, which would stall the CLI. */

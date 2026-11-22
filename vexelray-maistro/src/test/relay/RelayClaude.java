@@ -53,8 +53,8 @@ public class RelayClaude {
             relay say              (stdin) the reply's text, and end the turn
             relay text             (stdin) text, turn left open
             relay think            (stdin) a thinking block
-            relay tool <name>      (stdin: JSON arguments, may be empty) call Maistro's tool <name> as the CLI does;
-                                   prints the result, and saves any picture under the relay folder
+            relay tool <name>      (stdin: JSON arguments, may be empty) call Maistro's tool as the CLI does: <server>/<tool>,
+                                   or a tool one server alone has; prints the result, and saves any picture
             relay ask <Tool>       (stdin: JSON input) ask permission to run a tool, wait for the human's answer
             relay end [error]      end the turn (as a failure with 'error')
             relay status           the session, the open turn, the tools, what is waiting
@@ -89,10 +89,13 @@ public class RelayClaude {
         final Map<String, CompletableFuture<JsonValue>> waiting = new ConcurrentHashMap<>();
         final LinkedBlockingQueue<String> inbox = new LinkedBlockingQueue<>();
         final AtomicInteger ids = new AtomicInteger();
-        final List<String> mcpTools = new ArrayList<>();
-        final String server = System.getenv().getOrDefault("RELAY_MCP_SERVER", "maistro");
+        /** Each of Maistro's MCP servers, in order, with the tools it listed. */
+        final Map<String, List<String>> mcpTools = new java.util.LinkedHashMap<>();
+        /** Maistro's servers, as its --mcp-config names them; cmd does not pass that on, so they are said here. */
+        final List<String> servers = List.of(System.getenv().getOrDefault("RELAY_MCP_SERVERS", "maistro,maistro-fs")
+                .split(","));
         volatile boolean started;
-        volatile String mcpStatus = "not asked";
+        final Map<String, String> mcpStatus = new ConcurrentHashMap<>();
         volatile boolean turnOpen;
         volatile int turns;
         int mcpId;
@@ -175,29 +178,56 @@ public class RelayClaude {
             }
         }
 
-        // ---- the MCP handshake, as claude.exe 2.1.308 was recorded doing it
+        // ---- the MCP handshake, as claude.exe 2.1.308 was recorded doing it, with each server in turn
 
         void handshake() {
-            try {
-                mcp("initialize", JsonValue.Obj.builder().put("protocolVersion", "2025-11-25")
-                        .put("capabilities", JsonValue.Obj.EMPTY)
-                        .put("clientInfo", JsonValue.Obj.builder().put("name", "relay-claude").put("version", "0")
-                                .build()).build(), true);
-                mcp("notifications/initialized", null, false);
-                JsonValue list = mcp("tools/list", null, true);
-                for (JsonValue t : list.get("result").get("tools").items()) {
-                    mcpTools.add(t.get("name").asString());
+            for (String server : servers) {
+                List<String> tools = new ArrayList<>();
+                try {
+                    mcp(server, "initialize", JsonValue.Obj.builder().put("protocolVersion", "2025-11-25")
+                            .put("capabilities", JsonValue.Obj.EMPTY)
+                            .put("clientInfo", JsonValue.Obj.builder().put("name", "relay-claude").put("version", "0")
+                                    .build()).build(), true);
+                    mcp(server, "notifications/initialized", null, false);
+                    JsonValue list = mcp(server, "tools/list", null, true);
+                    for (JsonValue t : list.get("result").get("tools").items()) {
+                        tools.add(t.get("name").asString());
+                    }
+                    mcpStatus.put(server, "connected");
+                } catch (TimeoutException e) {
+                    mcpStatus.put(server, "failed (no answer: is Maistro running without its tools?)");
+                } catch (Exception e) {
+                    mcpStatus.put(server, "failed (" + e + ")");
                 }
-                mcpStatus = "connected";
-            } catch (TimeoutException e) {
-                mcpStatus = "failed (no answer: is Maistro running without its tools?)";
-            } catch (Exception e) {
-                mcpStatus = "failed (" + e + ")";
+                mcpTools.put(server, tools);
             }
         }
 
-        /** One JSON-RPC message to Maistro's server; its reply (the {@code mcp_response}). */
-        JsonValue mcp(String method, JsonValue params, boolean withId) throws Exception {
+        /**
+         * The server and tool {@code name} means: {@code server/tool}, or a bare tool name that one server alone has.
+         * Null when it names none, or more than one.
+         */
+        String[] which(String name) {
+            int slash = name.indexOf('/');
+            if (slash >= 0) {
+                String s = name.substring(0, slash);
+                String t = name.substring(slash + 1);
+                return mcpTools.getOrDefault(s, List.of()).contains(t) ? new String[]{s, t} : null;
+            }
+            String[] found = null;
+            for (Map.Entry<String, List<String>> e : mcpTools.entrySet()) {
+                if (e.getValue().contains(name)) {
+                    if (found != null) {
+                        return null;
+                    }
+                    found = new String[]{e.getKey(), name};
+                }
+            }
+            return found;
+        }
+
+        /** One JSON-RPC message to Maistro's server {@code server}; its reply (the {@code mcp_response}). */
+        JsonValue mcp(String server, String method, JsonValue params, boolean withId) throws Exception {
             JsonValue.Obj.Builder m = JsonValue.Obj.builder().put("jsonrpc", "2.0");
             if (withId) {
                 m.put("id", mcpId++);
@@ -279,7 +309,7 @@ public class RelayClaude {
                 }
                 case "status" -> "ok pid=" + pid + " session=" + sessionId + " started=" + started
                         + " turn=" + (turnOpen ? "open" : "closed") + " turns=" + turns + " waiting=" + inbox.size()
-                        + "\nmcp " + server + ": " + mcpStatus + " " + mcpTools;
+                        + "\nmcp " + mcpStatus + " " + mcpTools;
                 case "exit" -> {
                     int code = arg.isEmpty() ? 1 : Integer.parseInt(arg);
                     Thread.ofPlatform().start(() -> {
@@ -320,16 +350,19 @@ public class RelayClaude {
         }
 
         String tool(String name, String payload) throws Exception {
-            if (name.isEmpty()) {
-                return "err which tool? " + mcpTools;
+            String[] st = which(name);
+            if (st == null) {
+                return "err which tool? give server/tool, or a name one server alone has: " + mcpTools;
             }
+            String server = st[0];
+            String tool = st[1];
             JsonValue args = payload.isBlank() ? JsonValue.Obj.EMPTY : Json.parse(payload);
             open();
             String useId = "toolu_relay_" + ids.incrementAndGet();
             emit(assistant(JsonValue.Obj.builder().put("type", "tool_use").put("id", useId)
-                    .put("name", "mcp__" + server + "__" + name).put("input", args).build()));
-            JsonValue r = mcp("tools/call", JsonValue.Obj.builder().put("name", name).put("arguments", args).build(),
-                    true);
+                    .put("name", "mcp__" + server + "__" + tool).put("input", args).build()));
+            JsonValue r = mcp(server, "tools/call", JsonValue.Obj.builder().put("name", tool).put("arguments", args)
+                    .build(), true);
             JsonValue result = r.get("result");
             boolean isError = result.get("isError").asBool(false) || r.has("error");
             StringBuilder shown = new StringBuilder(isError ? "ok tool answered with an error\n" : "ok\n");
@@ -345,6 +378,9 @@ public class RelayClaude {
                     shown.append(block.get("text").asString()).append('\n');
                 }
                 back.add(block);
+            }
+            if (result.has("structuredContent")) {
+                shown.append(result.get("structuredContent").toJson()).append('\n');
             }
             if (r.has("error")) {
                 shown.append(r.get("error").toJson()).append('\n');
@@ -396,15 +432,19 @@ public class RelayClaude {
 
         JsonValue init() {
             List<String> tools = new ArrayList<>(List.of("Bash", "Read", "Edit", "Write", "Glob", "Grep"));
-            for (String t : mcpTools) {
-                tools.add("mcp__" + server + "__" + t);
+            List<JsonValue> mcpServers = new ArrayList<>();
+            for (Map.Entry<String, List<String>> e : mcpTools.entrySet()) {
+                for (String t : e.getValue()) {
+                    tools.add("mcp__" + e.getKey() + "__" + t);
+                }
+                mcpServers.add(JsonValue.Obj.builder().put("name", e.getKey())
+                        .put("status", mcpStatus.getOrDefault(e.getKey(), "").startsWith("connected") ? "connected"
+                                : "failed").put("source", "sdk").build());
             }
             return JsonValue.Obj.builder().put("type", "system").put("subtype", "init")
                     .put("cwd", Path.of("").toAbsolutePath().toString()).put("session_id", sessionId)
                     .put("tools", JsonValue.Arr.ofStrings(tools))
-                    .put("mcp_servers", JsonValue.Arr.of(JsonValue.Obj.builder().put("name", server)
-                            .put("status", mcpStatus.startsWith("connected") ? "connected" : "failed")
-                            .put("source", "sdk").build()))
+                    .put("mcp_servers", new JsonValue.Arr(mcpServers))
                     .put("model", "relay").put("permissionMode", "default").put("apiKeySource", "none")
                     .put("claude_code_version", "relay").put("uuid", UUID.randomUUID().toString()).build();
         }

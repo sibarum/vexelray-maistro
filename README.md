@@ -141,7 +141,7 @@ Read these in this order.
 | `Session.java` | what comes back next time (the panes), in the framework's one settings store. |
 | `Motion.java` | the one tempo every widget moves at, on the framework's clock. |
 | `agent/` | **no `Gui`:** finding the CLI, its stream-json protocol as typed events, a strict JSON reader, the process. |
-| `tools/` | **no `Gui`:** the tools Maistro gives the agent, as an MCP server in this process that the CLI reaches over its own pipes; the read-only ones that look at the other running VexelRay applications through their automation sockets. |
+| `tools/` | **no `Gui`:** the tools Maistro gives the agent, one MCP server per toolset in this process, which the CLI reaches over its own pipes: `maistro`, the read-only ones that look at the other running VexelRay applications through their automation sockets, and `maistro-fs` (`tools/files/`), which reads files and folders (`stat`, `list`, `tree`, `read`, `search`) with structured results and declared encodings. |
 | `map/` | **no `Gui`:** the concept graph as a value, the `maistro-map` block format and its parser, a deterministic layout that keeps old nodes still. |
 | `chat/` | **no `Gui`:** the transcript and its turns. |
 | `archive/` | **no `Gui`:** a conversation as it is kept, and its JSON, written field by field. |
@@ -332,6 +332,7 @@ mvn.cmd compile exec:exec -Dautomation=0 "-Dapp.args=--claude=src/test/relay/rel
 ottermate --app maistro --script ask.txt                  # the human: click composer, type, key ENTER
 src/test/relay/relay next                                 # the model: prints the message, opens the turn
 echo '{"app":"maistro"}' | src/test/relay/relay tool shot # calls Maistro's own tool, as the CLI would
+echo '{"path":"README.md"}' | src/test/relay/relay tool maistro-fs/read  # server/tool where a name is in two
 src/test/relay/relay say <<'EOF'                          # the reply, maistro-map block and all; ends the turn
 ...
 EOF
